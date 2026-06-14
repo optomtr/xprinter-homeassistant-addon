@@ -96,15 +96,15 @@ def image_to_tspl(image, copies):
         "DENSITY 8\r\n"
         "DIRECTION 1\r\n"
         "REFERENCE 0,0\r\n"
+        "SET TEAR OFF\r\n"
     ).encode("ascii")
     label = (
-        "HOME\r\n"
         "CLS\r\n"
         f"BITMAP 0,0,{BYTES_PER_ROW},{HEIGHT},0,"
     ).encode("ascii") + bytes(bitmap) + b"\r\nPRINT 1,1\r\n"
 
-    # Re-find the physical label origin before every copy. This prevents a
-    # small media pitch error from accumulating over consecutive labels.
+    # GAP mode aligns each print to the sensor. HOME is intentionally omitted:
+    # running it after PRINT has already advanced the media skips one label.
     return setup + label * copies
 
 

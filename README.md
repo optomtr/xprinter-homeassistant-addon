@@ -66,9 +66,9 @@ data:
   copies: 1
 ```
 
-Starting with version `1.0.3`, the printer synchronizes with the gap sensor
-before every label, including every item in a multi-copy print job. This
-prevents vertical position drift across consecutive labels.
+Starting with version `1.0.4`, gap sensing remains enabled while tear mode is
+disabled. The next label stays aligned with the printhead without feeding an
+extra blank label.
 
 The preview endpoint accepts the same JSON:
 

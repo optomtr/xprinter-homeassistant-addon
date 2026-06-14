@@ -1,0 +1,19 @@
+name: Xprinter Label
+version: "1.0.0"
+slug: xprinter_label
+description: Print 30x20 mm QR labels on an Xprinter XP-365B over USB
+arch:
+  - aarch64
+startup: application
+boot: auto
+init: false
+usb: true
+udev: true
+ports:
+  8099/tcp: 8099
+ports_description:
+  8099/tcp: HTTP printing API
+options:
+  api_key: ""
+schema:
+  api_key: str

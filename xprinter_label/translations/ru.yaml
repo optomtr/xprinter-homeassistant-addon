@@ -1,0 +1,15 @@
+configuration:
+  api_key:
+    name: API-ключ
+    description: Необязательный ключ для заголовка X-API-Key.
+  label_height_mm:
+    name: Высота этикетки
+    description: Длина этикетки по направлению подачи бумаги, в миллиметрах.
+  gap_mm:
+    name: Зазор между этикетками
+    description: Фактический промежуток между соседними этикетками, в миллиметрах.
+  image_offset_dots:
+    name: Вертикальное смещение макета
+    description: Плюс сдвигает макет вниз, минус сдвигает его вверх.
+network:
+  8099/tcp: HTTP API печати

@@ -1,5 +1,5 @@
 name: Xprinter Label
-version: "1.0.4"
+version: "1.1.0"
 slug: xprinter_label
 description: Print 30x20 mm QR labels on an Xprinter XP-365B over USB
 arch:
@@ -15,5 +15,11 @@ ports_description:
   8099/tcp: HTTP printing API
 options:
   api_key: ""
+  label_height_mm: 20.0
+  gap_mm: 2.0
+  image_offset_dots: 0
 schema:
   api_key: str
+  label_height_mm: "float(15,25)"
+  gap_mm: "float(0,10)"
+  image_offset_dots: "int(-40,40)"

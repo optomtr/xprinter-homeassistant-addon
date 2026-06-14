@@ -15,7 +15,6 @@ PRODUCT_ID = 0x2016
 WIDTH = 240
 HEIGHT = 160
 BYTES_PER_ROW = WIDTH // 8
-GAP_DOTS = 16
 FONT_PATH = "/usr/share/fonts/ttf-dejavu/DejaVuSans-Bold.ttf"
 OPTIONS_PATH = "/data/options.json"
 
@@ -23,15 +22,19 @@ app = Flask(__name__)
 usb_lock = threading.Lock()
 
 
-def load_api_key():
+def load_options():
     try:
         with open(OPTIONS_PATH, "r", encoding="utf-8") as options_file:
-            return str(json.load(options_file).get("api_key", ""))
+            return json.load(options_file)
     except (FileNotFoundError, json.JSONDecodeError):
-        return ""
+        return {}
 
 
-API_KEY = load_api_key()
+OPTIONS = load_options()
+API_KEY = str(OPTIONS.get("api_key", ""))
+LABEL_HEIGHT_MM = float(OPTIONS.get("label_height_mm", 20.0))
+GAP_MM = float(OPTIONS.get("gap_mm", 2.0))
+IMAGE_OFFSET_DOTS = int(OPTIONS.get("image_offset_dots", 0))
 
 
 def authorized():
@@ -74,7 +77,13 @@ def make_label(text, qr_payload):
     )
     vertical_text = text_image.rotate(90, expand=True)
     label.paste(vertical_text, (158, 15))
-    return label
+
+    if IMAGE_OFFSET_DOTS == 0:
+        return label
+
+    shifted = Image.new("1", (WIDTH, HEIGHT), 1)
+    shifted.paste(label, (0, IMAGE_OFFSET_DOTS))
+    return shifted
 
 
 def image_to_tspl(image, copies):
@@ -91,8 +100,8 @@ def image_to_tspl(image, copies):
             bitmap.append(value)
 
     setup = (
-        "SIZE 30 mm,20 mm\r\n"
-        "GAP 2 mm,0 mm\r\n"
+        f"SIZE 30 mm,{LABEL_HEIGHT_MM:g} mm\r\n"
+        f"GAP {GAP_MM:g} mm,0 mm\r\n"
         "DENSITY 8\r\n"
         "DIRECTION 1\r\n"
         "REFERENCE 0,0\r\n"
@@ -168,7 +177,15 @@ def parse_request():
 @app.get("/health")
 def health():
     connected = usb.core.find(idVendor=VENDOR_ID, idProduct=PRODUCT_ID) is not None
-    return jsonify({"ok": True, "printer_connected": connected})
+    return jsonify(
+        {
+            "ok": True,
+            "printer_connected": connected,
+            "label_height_mm": LABEL_HEIGHT_MM,
+            "gap_mm": GAP_MM,
+            "image_offset_dots": IMAGE_OFFSET_DOTS,
+        }
+    )
 
 
 @app.post("/preview")
@@ -216,8 +233,10 @@ def calibrate():
     try:
         # Calibrate once after loading a roll. Running this before every print
         # can advance an extra label.
+        label_height_dots = round(LABEL_HEIGHT_MM * 8)
+        gap_dots = round(GAP_MM * 8)
         payload = (
-            f"GAPDETECT {HEIGHT},{GAP_DOTS}\r\n"
+            f"GAPDETECT {label_height_dots},{gap_dots}\r\n"
             "HOME\r\n"
         ).encode("ascii")
         with usb_lock:
@@ -225,8 +244,8 @@ def calibrate():
         return jsonify(
             {
                 "ok": True,
-                "label_length_dots": HEIGHT,
-                "gap_dots": GAP_DOTS,
+                "label_length_dots": label_height_dots,
+                "gap_dots": gap_dots,
             }
         )
     except (RuntimeError, usb.core.USBError) as error:

@@ -70,6 +70,20 @@ Starting with version `1.0.4`, gap sensing remains enabled while tear mode is
 disabled. The next label stays aligned with the printhead without feeding an
 extra blank label.
 
+## Manual media adjustment
+
+Open the add-on **Configuration** tab and adjust:
+
+- `label_height_mm`: physical label length in the feed direction. Default `20`.
+- `gap_mm`: physical gap between labels. Default `2`.
+- `image_offset_dots`: moves the complete design inside the label. Positive
+  values move it down, negative values move it up. At 203 DPI, 8 dots are
+  approximately 1 mm.
+
+Save and restart the add-on after changing a value. For cumulative drift, tune
+`gap_mm` first in steps of `0.1` mm. Use `image_offset_dots` only when every
+label has the same fixed displacement.
+
 The preview endpoint accepts the same JSON:
 
 ```bash

@@ -1,0 +1,15 @@
+configuration:
+  api_key:
+    name: API key
+    description: Optional key expected in the X-API-Key request header.
+  label_height_mm:
+    name: Label height
+    description: Label length in the paper feed direction, in millimeters.
+  gap_mm:
+    name: Label gap
+    description: Physical gap between consecutive labels, in millimeters.
+  image_offset_dots:
+    name: Vertical image offset
+    description: Positive values move the design down; negative values move it up.
+network:
+  8099/tcp: HTTP printing API

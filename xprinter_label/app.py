@@ -15,6 +15,7 @@ PRODUCT_ID = 0x2016
 WIDTH = 240
 HEIGHT = 160
 BYTES_PER_ROW = WIDTH // 8
+GAP_DOTS = 16
 FONT_PATH = "/usr/share/fonts/ttf-dejavu/DejaVuSans-Bold.ttf"
 OPTIONS_PATH = "/data/options.json"
 
@@ -199,6 +200,30 @@ def print_label():
         )
     except (TypeError, ValueError) as error:
         return jsonify({"error": str(error)}), 400
+    except (RuntimeError, usb.core.USBError) as error:
+        return jsonify({"error": str(error)}), 503
+
+
+@app.post("/calibrate")
+def calibrate():
+    if not authorized():
+        return jsonify({"error": "unauthorized"}), 401
+    try:
+        # Calibrate once after loading a roll. Running this before every print
+        # can advance an extra label.
+        payload = (
+            f"GAPDETECT {HEIGHT},{GAP_DOTS}\r\n"
+            "HOME\r\n"
+        ).encode("ascii")
+        with usb_lock:
+            send_usb(payload)
+        return jsonify(
+            {
+                "ok": True,
+                "label_length_dots": HEIGHT,
+                "gap_dots": GAP_DOTS,
+            }
+        )
     except (RuntimeError, usb.core.USBError) as error:
         return jsonify({"error": str(error)}), 503
 

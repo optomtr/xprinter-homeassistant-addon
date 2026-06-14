@@ -40,9 +40,21 @@ rest_command:
         "qr": {{ qr | tojson }},
         "copies": {{ copies | default(1) | int }}
       }
+  xprinter_calibrate:
+    url: "http://HOME_ASSISTANT_IP:8099/calibrate"
+    method: POST
 ```
 
 Restart Home Assistant after changing `configuration.yaml`.
+
+Run calibration once after loading or replacing a label roll:
+
+```yaml
+action: rest_command.xprinter_calibrate
+```
+
+The printer will feed several labels while detecting the 20 mm label length
+and 2 mm gap. Do not run calibration before every print.
 
 Example action:
 

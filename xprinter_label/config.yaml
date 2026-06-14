@@ -1,5 +1,5 @@
 name: Xprinter Label
-version: "1.0.2"
+version: "1.0.3"
 slug: xprinter_label
 description: Print 30x20 mm QR labels on an Xprinter XP-365B over USB
 arch:

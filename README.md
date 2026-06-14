@@ -66,6 +66,10 @@ data:
   copies: 1
 ```
 
+Starting with version `1.0.3`, the printer synchronizes with the gap sensor
+before every label, including every item in a multi-copy print job. This
+prevents vertical position drift across consecutive labels.
+
 The preview endpoint accepts the same JSON:
 
 ```bash

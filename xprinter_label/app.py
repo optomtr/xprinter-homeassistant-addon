@@ -90,17 +90,22 @@ def image_to_tspl(image, copies):
                     value |= 1 << (7 - bit)
             bitmap.append(value)
 
-    header = (
+    setup = (
         "SIZE 30 mm,20 mm\r\n"
         "GAP 2 mm,0 mm\r\n"
         "DENSITY 8\r\n"
         "DIRECTION 1\r\n"
         "REFERENCE 0,0\r\n"
+    ).encode("ascii")
+    label = (
+        "HOME\r\n"
         "CLS\r\n"
         f"BITMAP 0,0,{BYTES_PER_ROW},{HEIGHT},0,"
-    ).encode("ascii")
-    footer = f"\r\nPRINT 1,{copies}\r\n".encode("ascii")
-    return header + bytes(bitmap) + footer
+    ).encode("ascii") + bytes(bitmap) + b"\r\nPRINT 1,1\r\n"
+
+    # Re-find the physical label origin before every copy. This prevents a
+    # small media pitch error from accumulating over consecutive labels.
+    return setup + label * copies
 
 
 def send_usb(payload):

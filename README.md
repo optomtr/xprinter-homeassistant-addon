@@ -2,6 +2,9 @@
 
 Local Home Assistant add-on for printing 30x20 mm labels through USB.
 
+Russian API documentation for integrators:
+[INTEGRATION_RU.md](INTEGRATION_RU.md).
+
 The printer is selected by its stable USB ID:
 
 - Vendor: `1fc9`

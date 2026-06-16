@@ -164,6 +164,64 @@ curl -X POST http://homeassistant.local:8012/preview \
   --output preview.png
 ```
 
+## Печать произвольного текста
+
+Этот режим печатает обычную текстовую этикетку без QR-кода и без логотипа.
+Поддерживается английский и русский текст, потому что текст рендерится как
+изображение.
+
+### Запрос
+
+```http
+POST /print-text
+Content-Type: application/json
+```
+
+Тело запроса:
+
+```json
+{
+  "text": "Door opened",
+  "copies": 1,
+  "font_size": 22,
+  "align": "center"
+}
+```
+
+Поля:
+
+| Поле | Тип | Обязательно | Ограничения |
+| --- | --- | --- | --- |
+| `text` | string | да | От 1 до 300 символов |
+| `copies` | integer | нет | От 1 до 20, по умолчанию 1 |
+| `font_size` | integer | нет | От 10 до 48, по умолчанию 22 |
+| `align` | string | нет | `left`, `center` или `right` |
+
+Текст автоматически переносится по строкам. Если текст не помещается, размер
+шрифта уменьшается автоматически, но не ниже 10.
+
+Пример:
+
+```bash
+curl -X POST http://homeassistant.local:8012/print-text \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "text": "Открыта входная дверь",
+    "copies": 1,
+    "font_size": 22,
+    "align": "center"
+  }'
+```
+
+Предпросмотр текстовой этикетки:
+
+```bash
+curl -X POST http://homeassistant.local:8012/preview-text \
+  -H 'Content-Type: application/json' \
+  -d '{"text":"Открыта входная дверь","font_size":22,"align":"center"}' \
+  --output text-preview.png
+```
+
 ## Авторизация
 
 В настройках add-on можно задать `api_key`. Если ключ задан, запросы
@@ -204,6 +262,17 @@ rest_command:
         "qr": {{ qr | tojson }},
         "copies": {{ copies | default(1) | int }}
       }
+  xprinter_text:
+    url: "http://homeassistant.local:8012/print-text"
+    method: POST
+    content_type: "application/json"
+    payload: >-
+      {
+        "text": {{ text | tojson }},
+        "copies": {{ copies | default(1) | int }},
+        "font_size": {{ font_size | default(22) | int }},
+        "align": {{ align | default("center") | tojson }}
+      }
 ```
 
 После изменения конфигурации необходимо перезапустить Home Assistant.
@@ -228,6 +297,17 @@ actions:
       text: "ID:ASD-1294"
       qr: "ASD-1294"
       copies: 1
+```
+
+Пример печати произвольного текста из Home Assistant:
+
+```yaml
+action: rest_command.xprinter_text
+data:
+  text: "Открыта входная дверь"
+  copies: 1
+  font_size: 22
+  align: "center"
 ```
 
 ## Ошибки

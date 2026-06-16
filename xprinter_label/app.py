@@ -86,6 +86,107 @@ def make_label(text, qr_payload):
     return shifted
 
 
+def apply_image_offset(image):
+    if IMAGE_OFFSET_DOTS == 0:
+        return image
+
+    shifted = Image.new("1", (WIDTH, HEIGHT), 1)
+    shifted.paste(image, (0, IMAGE_OFFSET_DOTS))
+    return shifted
+
+
+def wrap_text(draw, text, font, max_width):
+    lines = []
+
+    def split_long_word(word):
+        chunks = []
+        current = ""
+        for char in word:
+            candidate = f"{current}{char}"
+            if draw.textlength(candidate, font=font) <= max_width:
+                current = candidate
+                continue
+            if current:
+                chunks.append(current)
+            current = char
+        if current:
+            chunks.append(current)
+        return chunks
+
+    for paragraph in text.splitlines() or [""]:
+        words = paragraph.split()
+        if not words:
+            lines.append("")
+            continue
+
+        current = ""
+        for word in words:
+            candidate = word if not current else f"{current} {word}"
+            if draw.textlength(candidate, font=font) <= max_width:
+                current = candidate
+                continue
+
+            if current:
+                lines.append(current)
+            if draw.textlength(word, font=font) <= max_width:
+                current = word
+            else:
+                wrapped_word = split_long_word(word)
+                lines.extend(wrapped_word[:-1])
+                current = wrapped_word[-1] if wrapped_word else ""
+
+        if current:
+            lines.append(current)
+
+    return lines
+
+
+def make_text_label(text, font_size=22, align="center"):
+    label = Image.new("1", (WIDTH, HEIGHT), 1)
+    draw = ImageDraw.Draw(label)
+    font = ImageFont.truetype(FONT_PATH, font_size)
+    max_width = WIDTH - 20
+    max_height = HEIGHT - 16
+    line_spacing = max(3, font_size // 5)
+
+    lines = wrap_text(draw, text, font, max_width)
+    while font_size > 10:
+        line_heights = [
+            draw.textbbox((0, 0), line or " ", font=font)[3]
+            - draw.textbbox((0, 0), line or " ", font=font)[1]
+            for line in lines
+        ]
+        total_height = sum(line_heights) + line_spacing * max(0, len(lines) - 1)
+        widest = max((draw.textlength(line, font=font) for line in lines), default=0)
+        if total_height <= max_height and widest <= max_width:
+            break
+        font_size -= 1
+        font = ImageFont.truetype(FONT_PATH, font_size)
+        line_spacing = max(3, font_size // 5)
+        lines = wrap_text(draw, text, font, max_width)
+
+    line_heights = [
+        draw.textbbox((0, 0), line or " ", font=font)[3]
+        - draw.textbbox((0, 0), line or " ", font=font)[1]
+        for line in lines
+    ]
+    total_height = sum(line_heights) + line_spacing * max(0, len(lines) - 1)
+    y = max(0, (HEIGHT - total_height) // 2)
+
+    for line, line_height in zip(lines, line_heights):
+        line_width = draw.textlength(line, font=font)
+        if align == "left":
+            x = 10
+        elif align == "right":
+            x = WIDTH - 10 - line_width
+        else:
+            x = (WIDTH - line_width) // 2
+        draw.text((x, y), line, fill=0, font=font)
+        y += line_height + line_spacing
+
+    return apply_image_offset(label)
+
+
 def image_to_tspl(image, copies):
     monochrome = image.convert("1")
     bitmap = bytearray()
@@ -174,6 +275,27 @@ def parse_request():
     return text, qr_payload, copies
 
 
+def parse_text_request():
+    body = request.get_json(silent=True) or {}
+    text = str(body.get("text", "")).strip()
+    copies = int(body.get("copies", 1))
+    font_size = int(body.get("font_size", 22))
+    align = str(body.get("align", "center")).strip().lower()
+
+    if not text:
+        raise ValueError("text must not be empty")
+    if len(text) > 300:
+        raise ValueError("text must contain at most 300 characters")
+    if not 1 <= copies <= 20:
+        raise ValueError("copies must be between 1 and 20")
+    if not 10 <= font_size <= 48:
+        raise ValueError("font_size must be between 10 and 48")
+    if align not in {"left", "center", "right"}:
+        raise ValueError("align must be left, center, or right")
+
+    return text, copies, font_size, align
+
+
 @app.get("/health")
 def health():
     connected = usb.core.find(idVendor=VENDOR_ID, idProduct=PRODUCT_ID) is not None
@@ -203,6 +325,21 @@ def preview():
         return jsonify({"error": str(error)}), 400
 
 
+@app.post("/preview-text")
+def preview_text():
+    if not authorized():
+        return jsonify({"error": "unauthorized"}), 401
+    try:
+        text, _, font_size, align = parse_text_request()
+        image = make_text_label(text, font_size, align).convert("L")
+        output = io.BytesIO()
+        image.save(output, format="PNG")
+        output.seek(0)
+        return send_file(output, mimetype="image/png")
+    except (TypeError, ValueError) as error:
+        return jsonify({"error": str(error)}), 400
+
+
 @app.post("/print")
 def print_label():
     if not authorized():
@@ -218,6 +355,30 @@ def print_label():
                 "text": text,
                 "qr": qr_payload,
                 "copies": copies,
+            }
+        )
+    except (TypeError, ValueError) as error:
+        return jsonify({"error": str(error)}), 400
+    except (RuntimeError, usb.core.USBError) as error:
+        return jsonify({"error": str(error)}), 503
+
+
+@app.post("/print-text")
+def print_text():
+    if not authorized():
+        return jsonify({"error": "unauthorized"}), 401
+    try:
+        text, copies, font_size, align = parse_text_request()
+        payload = image_to_tspl(make_text_label(text, font_size, align), copies)
+        with usb_lock:
+            send_usb(payload)
+        return jsonify(
+            {
+                "ok": True,
+                "text": text,
+                "copies": copies,
+                "font_size": font_size,
+                "align": align,
             }
         )
     except (TypeError, ValueError) as error:

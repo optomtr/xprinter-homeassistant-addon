@@ -46,6 +46,17 @@ rest_command:
   xprinter_calibrate:
     url: "http://HOME_ASSISTANT_IP:8099/calibrate"
     method: POST
+  xprinter_text:
+    url: "http://HOME_ASSISTANT_IP:8099/print-text"
+    method: POST
+    content_type: "application/json"
+    payload: >-
+      {
+        "text": {{ text | tojson }},
+        "copies": {{ copies | default(1) | int }},
+        "font_size": {{ font_size | default(22) | int }},
+        "align": {{ align | default("center") | tojson }}
+      }
 ```
 
 Restart Home Assistant after changing `configuration.yaml`.
@@ -95,3 +106,17 @@ curl -X POST http://HOME_ASSISTANT_IP:8099/preview \
   -d '{"text":"ID:ASD-1294","qr":"ASD-1294"}' \
   --output preview.png
 ```
+
+Print a free-form text label:
+
+```yaml
+action: rest_command.xprinter_text
+data:
+  text: "Door opened"
+  copies: 1
+  font_size: 22
+  align: "center"
+```
+
+`/print-text` supports Cyrillic and English text because the label is rendered
+as an image before printing. Maximum text length is 300 characters.

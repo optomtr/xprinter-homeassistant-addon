@@ -14,6 +14,12 @@ configuration:
   image_offset_dots:
     name: Small vertical image offset
     description: Positive values move the small-label design down; negative values move it up.
+  small_density:
+    name: Small print density
+    description: Heat density for small labels, from 0 to 15.
+  small_speed:
+    name: Small print speed
+    description: Print speed for small labels. Lower values print darker and slower.
   large_label_height_mm:
     name: Large label height
     description: Large label length in the paper feed direction, in millimeters.
@@ -26,5 +32,11 @@ configuration:
   large_image_offset_dots:
     name: Large vertical image offset
     description: Positive values move the large-label design down; negative values move it up.
+  large_density:
+    name: Large print density
+    description: Heat density for large labels, from 0 to 15.
+  large_speed:
+    name: Large print speed
+    description: Print speed for large labels. Lower values help solid black areas print darker.
 network:
   8099/tcp: HTTP printing API

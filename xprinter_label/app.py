@@ -39,6 +39,8 @@ class LabelProfile:
     margin_mm: float
     image_offset_dots: int
     black_pixel_bit: int
+    density: int
+    speed: float
 
     @property
     def width_dots(self):
@@ -85,6 +87,8 @@ def build_profiles():
             image_offset_dots=int(OPTIONS.get("image_offset_dots", 0)),
             # Legacy mode: keep the old 30x20 bitmap polarity untouched.
             black_pixel_bit=1,
+            density=int(OPTIONS.get("small_density", 8)),
+            speed=float(OPTIONS.get("small_speed", 4.0)),
         ),
         "large_60x100": LabelProfile(
             name="large_60x100",
@@ -95,6 +99,8 @@ def build_profiles():
             image_offset_dots=int(OPTIONS.get("large_image_offset_dots", 0)),
             # New large labels use normal preview polarity: black preview prints black.
             black_pixel_bit=0,
+            density=int(OPTIONS.get("large_density", 15)),
+            speed=float(OPTIONS.get("large_speed", 2.0)),
         ),
     }
 
@@ -455,7 +461,8 @@ def image_to_tspl(image, profile, copies):
     setup = (
         f"SIZE {profile.width_mm:g} mm,{profile.height_mm:g} mm\r\n"
         f"GAP {profile.gap_mm:g} mm,0 mm\r\n"
-        "DENSITY 8\r\n"
+        f"DENSITY {profile.density}\r\n"
+        f"SPEED {profile.speed:g}\r\n"
         "DIRECTION 1\r\n"
         "REFERENCE 0,0\r\n"
         "SET TEAR OFF\r\n"
@@ -704,6 +711,8 @@ def health():
                     "gap_mm": profile.gap_mm,
                     "margin_mm": profile.margin_mm,
                     "image_offset_dots": profile.image_offset_dots,
+                    "density": profile.density,
+                    "speed": profile.speed,
                     "width_dots": profile.width_dots,
                     "height_dots": profile.height_dots,
                 }

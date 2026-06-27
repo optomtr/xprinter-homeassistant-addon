@@ -108,6 +108,12 @@ Open the add-on **Configuration** tab and adjust:
 - `large_gap_mm`: large label gap. Default `4`.
 - `large_margin_mm`: large label printable margin. Default `4`.
 - `large_image_offset_dots`: vertical offset for large labels.
+- `large_density`: heat density for large labels. Default `15`.
+- `large_speed`: print speed for large labels. Default `2.0`.
+
+If large black areas look speckled on paper, keep `large_density` at `15` and
+try lowering `large_speed` to `1.5` or `1.0`. This is a physical thermal-print
+issue, not a preview issue.
 
 Save and restart the add-on after changing a value. For cumulative drift, tune
 `gap_mm` first in steps of `0.1` mm. Use `image_offset_dots` only when every

@@ -281,10 +281,28 @@ curl -X POST http://homeassistant.local:8012/print-file \
 | `copies` | integer | нет | От 1 до 20 |
 | `fit` | string | нет | `contain`, `cover` или `stretch` |
 | `invert` | boolean | нет | Инвертирует само изображение перед печатью |
+| `full_bleed` | boolean | нет | Убирает внутренний отступ и печатает на всю область |
+| `threshold` | integer | нет | Порог чёрно-белой конвертации, от 1 до 254, по умолчанию 180 |
 
 Рекомендуемый режим для документов: `fit=contain`. Он сохраняет пропорции и
 оставляет поля. На большой бумаге применяется отступ `large_margin_mm`, по
 умолчанию 4 мм.
+
+Для готовых JPG-макетов BMS используйте режим во весь лист:
+
+```bash
+curl -X POST http://homeassistant.local:8012/preview-file \
+  -F profile=large_60x100 \
+  -F fit=stretch \
+  -F full_bleed=true \
+  -F threshold=180 \
+  -F file=@label.jpg \
+  --output preview.png
+```
+
+`threshold` убирает грязный dithering и делает чёрные области плотными. Если
+тонкие элементы пропадают, уменьшите значение, например до `150`. Если
+появляется лишний серый шум, увеличьте до `200`.
 
 ## Печать встроенных BMS-этикеток
 

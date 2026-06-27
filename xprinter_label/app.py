@@ -297,16 +297,16 @@ def make_text_label(text, profile, font_size=22, align="center"):
     return apply_image_offset(label, profile)
 
 
-def to_monochrome(image, invert_image=False):
+def to_monochrome(image, invert_image=False, threshold=180):
     image = ImageOps.exif_transpose(image)
     if image.mode in {"RGBA", "LA"}:
         background = Image.new("RGBA", image.size, "white")
         background.alpha_composite(image.convert("RGBA"))
         image = background.convert("RGB")
-    image = image.convert("L")
+    image = ImageOps.autocontrast(image.convert("L"))
     if invert_image:
         image = ImageOps.invert(image)
-    return image.convert("1")
+    return image.point(lambda pixel: 0 if pixel < threshold else 255, "1")
 
 
 def render_pdf_first_page(data, target_width, target_height):
@@ -377,15 +377,24 @@ def fit_image_to_box(image, box_width, box_height, fit):
     return resized
 
 
-def make_file_label(data, filename, content_type, profile, fit="contain", invert_image=False):
+def make_file_label(
+    data,
+    filename,
+    content_type,
+    profile,
+    fit="contain",
+    invert_image=False,
+    full_bleed=False,
+    threshold=180,
+):
     if fit not in {"contain", "cover", "stretch"}:
         raise ValueError("fit must be contain, cover, or stretch")
 
     source = load_uploaded_image(data, filename, content_type)
-    source = to_monochrome(source, invert_image)
+    source = to_monochrome(source, invert_image, threshold)
 
     label = Image.new("1", (profile.width_dots, profile.height_dots), 1)
-    margin = profile.margin_dots
+    margin = 0 if full_bleed else profile.margin_dots
     box_width = profile.width_dots - margin * 2
     box_height = profile.height_dots - margin * 2
     fitted = fit_image_to_box(source, box_width, box_height, fit)
@@ -414,7 +423,7 @@ def make_builtin_template_label(template_id):
 
     source = Image.open(image_path)
     source.load()
-    source = to_monochrome(source, False)
+    source = to_monochrome(source, False, 180)
     label = Image.new("1", (profile.width_dots, profile.height_dots), 1)
     fitted = fit_image_to_box(
         source,
@@ -546,11 +555,15 @@ def parse_file_request():
     copies = int(body.get("copies", 1))
     fit = str(body.get("fit", "contain")).strip().lower()
     invert_image = bool_param(body.get("invert"), False)
+    full_bleed = bool_param(body.get("full_bleed"), False)
+    threshold = int(body.get("threshold", 180))
 
     if not 1 <= copies <= 20:
         raise ValueError("copies must be between 1 and 20")
     if fit not in {"contain", "cover", "stretch"}:
         raise ValueError("fit must be contain, cover, or stretch")
+    if not 1 <= threshold <= 254:
+        raise ValueError("threshold must be between 1 and 254")
 
     uploaded = request.files.get("file")
     if uploaded:
@@ -573,7 +586,7 @@ def parse_file_request():
     if len(data) > 8 * 1024 * 1024:
         raise ValueError("file must be at most 8 MB")
 
-    return data, filename, content_type, profile, copies, fit, invert_image
+    return data, filename, content_type, profile, copies, fit, invert_image, full_bleed, threshold
 
 
 def parse_template_request():
@@ -645,6 +658,7 @@ def index():
         <option value="stretch">stretch</option>
       </select>
     </label>
+    <label><input type="checkbox" name="full_bleed" value="true"> Full bleed</label>
     <p><input type="file" name="file" required></p>
     <p><button type="submit">Preview</button></p>
   </form>
@@ -663,6 +677,7 @@ def index():
         <option value="stretch">stretch</option>
       </select>
     </label>
+    <label><input type="checkbox" name="full_bleed" value="true"> Full bleed</label>
     <label>Copies:
       <input name="copies" type="number" value="1" min="1" max="20">
     </label>
@@ -746,9 +761,28 @@ def preview_file():
     if not authorized():
         return jsonify({"error": "unauthorized"}), 401
     try:
-        data, filename, content_type, profile, _, fit, invert_image = parse_file_request()
+        (
+            data,
+            filename,
+            content_type,
+            profile,
+            _,
+            fit,
+            invert_image,
+            full_bleed,
+            threshold,
+        ) = parse_file_request()
         return png_response(
-            make_file_label(data, filename, content_type, profile, fit, invert_image)
+            make_file_label(
+                data,
+                filename,
+                content_type,
+                profile,
+                fit,
+                invert_image,
+                full_bleed,
+                threshold,
+            )
         )
     except (TypeError, ValueError, subprocess.CalledProcessError) as error:
         return jsonify({"error": str(error)}), 400
@@ -822,9 +856,28 @@ def print_file():
     if not authorized():
         return jsonify({"error": "unauthorized"}), 401
     try:
-        data, filename, content_type, profile, copies, fit, invert_image = parse_file_request()
+        (
+            data,
+            filename,
+            content_type,
+            profile,
+            copies,
+            fit,
+            invert_image,
+            full_bleed,
+            threshold,
+        ) = parse_file_request()
         payload = image_to_tspl(
-            make_file_label(data, filename, content_type, profile, fit, invert_image),
+            make_file_label(
+                data,
+                filename,
+                content_type,
+                profile,
+                fit,
+                invert_image,
+                full_bleed,
+                threshold,
+            ),
             profile,
             copies,
         )
@@ -838,6 +891,8 @@ def print_file():
                 "copies": copies,
                 "fit": fit,
                 "invert": invert_image,
+                "full_bleed": full_bleed,
+                "threshold": threshold,
             }
         )
     except (TypeError, ValueError, subprocess.CalledProcessError) as error:

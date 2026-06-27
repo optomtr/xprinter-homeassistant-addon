@@ -193,6 +193,19 @@ curl -X POST http://HOME_ASSISTANT_IP:8099/print-file \
   -F file=@document.pdf
 ```
 
+For ready-made BMS label JPG files that must fill the whole 60x100 label,
+use full-bleed stretch mode:
+
+```bash
+curl -X POST http://HOME_ASSISTANT_IP:8099/preview-file \
+  -F profile=large_60x100 \
+  -F fit=stretch \
+  -F full_bleed=true \
+  -F threshold=180 \
+  -F file=@label.jpg \
+  --output preview.png
+```
+
 Supported upload formats: PDF first page, PNG, JPEG, WebP, and other formats
 that Pillow can read. The 30x20 QR label keeps its legacy color behavior; the
 60x100 profile previews and prints with normal black-on-white polarity.

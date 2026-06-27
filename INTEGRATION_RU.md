@@ -356,10 +356,192 @@ curl -X POST http://homeassistant.local:8012/print-template \
 }
 ```
 
+## Конструктор этикеток для реле коллектора
+
+Конструктор печатает документацию подключения в коробе коллектора на бумаге
+`large_60x100`. Он автоматически выбирает один из трёх макетов:
+
+- 1 реле — крупная таблица выходов;
+- 2 реле — две карточки;
+- 3 реле — три компактные карточки.
+
+### Лимиты
+
+| Количество реле | Максимум выходов на реле | Максимум выходов суммарно |
+| --- | --- | --- |
+| 1 | 4 | 4 |
+| 2 | 4 | 8 |
+| 3 | 4 | 9 |
+
+Комбинация `3 реле x 4 выхода = 12` отклоняется ошибкой HTTP `400`,
+потому что на этикетке 60x100 мм она становится нечитаемой. Допустимые
+варианты для трёх реле: например `3+3+3`, `4+3+2`, `4+4+1`.
+
+Получить лимиты через API:
+
+```bash
+curl http://homeassistant.local:8012/relay-limits
+```
+
+### Предпросмотр
+
+```http
+POST /preview-relay
+Content-Type: application/json
+```
+
+Пример для одного реле:
+
+```bash
+curl -X POST http://homeassistant.local:8012/preview-relay \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "relays": [
+      {
+        "title": "Реле 1",
+        "outputs": [
+          "Узел коллектора",
+          "Спальня",
+          "Холл",
+          "Мастер-санузел"
+        ]
+      }
+    ]
+  }' \
+  --output relay-preview.png
+```
+
+Ответом будет PNG `480x800 px`, соответствующий печати на бумаге 60x100 мм.
+
+### Печать
+
+```http
+POST /print-relay
+Content-Type: application/json
+```
+
+Пример для двух реле:
+
+```bash
+curl -X POST http://homeassistant.local:8012/print-relay \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "copies": 1,
+    "relays": [
+      {
+        "title": "Реле 1",
+        "outputs": ["Гостиная", "Кухня", "Холл"]
+      },
+      {
+        "title": "Реле 2",
+        "outputs": ["Спальня", "Санузел", "Гардероб", "Коридор"]
+      }
+    ]
+  }'
+```
+
+Пример для трёх реле:
+
+```bash
+curl -X POST http://homeassistant.local:8012/preview-relay \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "relays": [
+      {
+        "title": "Реле 1",
+        "outputs": ["Узел", "Спальня", "Холл"]
+      },
+      {
+        "title": "Реле 2",
+        "outputs": ["Кухня", "Детская", "Коридор"]
+      },
+      {
+        "title": "Реле 3",
+        "outputs": ["С/У мастер", "Гардероб", "Резерв"]
+      }
+    ]
+  }' \
+  --output relay-3-preview.png
+```
+
+### Формат данных
+
+Основной формат:
+
+```json
+{
+  "copies": 1,
+  "relays": [
+    {
+      "title": "Реле 1",
+      "outputs": [
+        {
+          "line": "L1",
+          "name": "Узел коллектора"
+        },
+        {
+          "line": "L2",
+          "name": "Спальня"
+        }
+      ]
+    }
+  ]
+}
+```
+
+Сокращённый формат:
+
+```json
+{
+  "relays": [
+    {
+      "title": "Реле 1",
+      "outputs": ["Узел коллектора", "Спальня", "Холл"]
+    }
+  ]
+}
+```
+
+В сокращённом формате линии назначаются автоматически: `L1`, `L2`, `L3`,
+`L4`.
+
+Поля:
+
+| Поле | Тип | Обязательно | Ограничения |
+| --- | --- | --- | --- |
+| `copies` | integer | нет | От 1 до 20 |
+| `relays` | array | да | От 1 до 3 реле |
+| `relays[].title` | string | нет | До 24 символов |
+| `relays[].outputs` | array/object | да | От 1 до 4 выходов на реле |
+| `line` | string | нет | До 4 символов, например `L1` |
+| `name` | string | да | До 40 символов |
+
+### Ошибка превышения лимита
+
+Запрос:
+
+```json
+{
+  "relays": [
+    {"title": "Реле 1", "outputs": ["A", "B", "C", "D"]},
+    {"title": "Реле 2", "outputs": ["A", "B", "C", "D"]},
+    {"title": "Реле 3", "outputs": ["A", "B", "C", "D"]}
+  ]
+}
+```
+
+Ответ:
+
+```json
+{
+  "error": "too many outputs for 3 relays: max 9 outputs total"
+}
+```
+
 ## Авторизация
 
-В настройках add-on можно задать `api_key`. Если ключ задан, запросы
-`/print`, `/preview` и `/calibrate` должны содержать:
+В настройках add-on можно задать `api_key`. Если ключ задан, все POST-запросы
+печати, предпросмотра и калибровки должны содержать:
 
 ```http
 X-API-Key: SECRET_KEY
@@ -417,6 +599,15 @@ rest_command:
         "template": {{ template | tojson }},
         "copies": {{ copies | default(1) | int }}
       }
+  xprinter_relay:
+    url: "http://homeassistant.local:8012/print-relay"
+    method: POST
+    content_type: "application/json"
+    payload: >-
+      {
+        "relays": {{ relays | tojson }},
+        "copies": {{ copies | default(1) | int }}
+      }
 ```
 
 После изменения конфигурации необходимо перезапустить Home Assistant.
@@ -462,6 +653,21 @@ action: rest_command.xprinter_template
 data:
   template: "sensor_panel"
   copies: 1
+```
+
+Пример печати документации реле:
+
+```yaml
+action: rest_command.xprinter_relay
+data:
+  copies: 1
+  relays:
+    - title: "Реле 1"
+      outputs:
+        - "Узел коллектора"
+        - "Спальня"
+        - "Холл"
+        - "Мастер-санузел"
 ```
 
 ## Ошибки

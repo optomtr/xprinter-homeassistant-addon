@@ -136,6 +136,11 @@ BUILTIN_TEMPLATES = {
         "filename": "motion_sensor.jpg",
     },
 }
+RELAY_LIMITS = {
+    1: {"max_total_outputs": 4, "max_outputs_per_relay": 4},
+    2: {"max_total_outputs": 8, "max_outputs_per_relay": 4},
+    3: {"max_total_outputs": 9, "max_outputs_per_relay": 4},
+}
 
 
 def authorized():
@@ -441,6 +446,266 @@ def make_builtin_template_label(template_id):
     return apply_image_offset(label, profile)
 
 
+def relay_font(size, bold=False, scale=2):
+    return ImageFont.truetype(FONT_PATH, size * scale)
+
+
+def relay_text_center(draw, box, text, font, fill=0):
+    x1, y1, x2, y2 = box
+    bbox = draw.textbbox((0, 0), text, font=font)
+    text_width = bbox[2] - bbox[0]
+    text_height = bbox[3] - bbox[1]
+    draw.text(
+        (
+            x1 + (x2 - x1 - text_width) // 2,
+            y1 + (y2 - y1 - text_height) // 2 - 1,
+        ),
+        text,
+        font=font,
+        fill=fill,
+    )
+
+
+def relay_fit_text(draw, text, max_width, start_size, min_size=10, scale=2):
+    size = start_size
+    while size > min_size:
+        font = relay_font(size, True, scale)
+        if draw.textlength(text, font=font) <= max_width:
+            return font
+        size -= 1
+    return relay_font(min_size, True, scale)
+
+
+def relay_draw_header(draw, image, scale=2):
+    template_path = BUILTIN_TEMPLATE_DIR / "yandex_station.jpg"
+    if template_path.exists():
+        header = Image.open(template_path).crop((0, 0, 709, 218))
+        header = ImageOps.autocontrast(header.convert("L")).resize(
+            (440 * scale, 134 * scale),
+            Image.Resampling.LANCZOS,
+        )
+        header = header.point(lambda pixel: 0 if pixel < 180 else 255, "1").convert("L")
+        image.paste(header, (20 * scale, 12 * scale))
+    else:
+        draw.rounded_rectangle(
+            (20 * scale, 12 * scale, 460 * scale, 146 * scale),
+            radius=16 * scale,
+            fill=0,
+        )
+        relay_text_center(
+            draw,
+            (20 * scale, 30 * scale, 460 * scale, 120 * scale),
+            "BMS",
+            relay_font(56, True, scale),
+            255,
+        )
+
+    draw.rounded_rectangle(
+        (20 * scale, 158 * scale, 460 * scale, 216 * scale),
+        radius=10 * scale,
+        fill=0,
+    )
+    relay_text_center(
+        draw,
+        (24 * scale, 160 * scale, 456 * scale, 188 * scale),
+        "ДОКУМЕНТАЦИЯ О ПОДКЛЮЧЕНИИ",
+        relay_font(19, True, scale),
+        255,
+    )
+    relay_text_center(
+        draw,
+        (24 * scale, 187 * scale, 456 * scale, 214 * scale),
+        "В КОРОБЕ КОЛЛЕКТОРА",
+        relay_font(19, True, scale),
+        255,
+    )
+
+
+def relay_draw_warning_icon(draw, cx, cy, label, kind, scale=2):
+    radius = 25 * scale
+    cx *= scale
+    cy *= scale
+    draw.ellipse((cx - radius, cy - radius, cx + radius, cy + radius), outline=0, width=4 * scale)
+    if kind == "bolt":
+        points = [
+            (cx + 2 * scale, cy - 20 * scale),
+            (cx - 10 * scale, cy + 2 * scale),
+            (cx + 1 * scale, cy + 2 * scale),
+            (cx - 6 * scale, cy + 20 * scale),
+            (cx + 14 * scale, cy - 6 * scale),
+            (cx + 2 * scale, cy - 6 * scale),
+        ]
+        draw.polygon(points, fill=0)
+    elif kind == "service":
+        draw.rounded_rectangle(
+            (cx - 13 * scale, cy - 15 * scale, cx + 13 * scale, cy + 14 * scale),
+            radius=3 * scale,
+            outline=0,
+            width=3 * scale,
+        )
+        draw.line((cx - 8 * scale, cy - 6 * scale, cx + 8 * scale, cy - 6 * scale), fill=0, width=2 * scale)
+        draw.line((cx - 8 * scale, cy + 3 * scale, cx + 8 * scale, cy + 3 * scale), fill=0, width=2 * scale)
+    else:
+        relay_text_center(
+            draw,
+            (cx - 22 * scale, cy - 13 * scale, cx + 22 * scale, cy + 13 * scale),
+            label,
+            relay_font(12, True, scale),
+            0,
+        )
+    relay_text_center(
+        draw,
+        (cx - 42 * scale, cy + 29 * scale, cx + 42 * scale, cy + 48 * scale),
+        label,
+        relay_font(11, True, scale),
+        0,
+    )
+
+
+def relay_draw_footer(draw, y=638, scale=2):
+    draw.line((28 * scale, y * scale, 452 * scale, y * scale), fill=0, width=3 * scale)
+    relay_draw_warning_icon(draw, 118, y + 42, "220V", "text", scale)
+    relay_draw_warning_icon(draw, 240, y + 42, "ОПАСНО", "bolt", scale)
+    relay_draw_warning_icon(draw, 362, y + 42, "СЕРВИС", "service", scale)
+    draw.rounded_rectangle(
+        (20 * scale, 746 * scale, 460 * scale, 794 * scale),
+        radius=8 * scale,
+        fill=0,
+    )
+    relay_text_center(
+        draw,
+        (24 * scale, 750 * scale, 456 * scale, 773 * scale),
+        "ОСТОРОЖНО: ВЫСОКОЕ НАПРЯЖЕНИЕ",
+        relay_font(15, True, scale),
+        255,
+    )
+    relay_text_center(
+        draw,
+        (24 * scale, 773 * scale, 456 * scale, 791 * scale),
+        "ТОЛЬКО ДЛЯ КВАЛИФИЦИРОВАННОГО СПЕЦИАЛИСТА",
+        relay_font(9, True, scale),
+        255,
+    )
+
+
+def relay_draw_row(draw, x, y, line, name, row_height=58, scale=2):
+    draw.rounded_rectangle(
+        (x * scale, y * scale, (x + 72) * scale, (y + row_height) * scale),
+        radius=6 * scale,
+        fill=0,
+    )
+    relay_text_center(
+        draw,
+        (x * scale, y * scale, (x + 72) * scale, (y + row_height) * scale),
+        line,
+        relay_font(24, True, scale),
+        255,
+    )
+    draw.rounded_rectangle(
+        ((x + 82) * scale, y * scale, 452 * scale, (y + row_height) * scale),
+        radius=6 * scale,
+        outline=0,
+        width=3 * scale,
+    )
+    font = relay_fit_text(draw, name, 350 * scale, 25, 15, scale)
+    draw.text(((x + 96) * scale, (y + 11) * scale), name, font=font, fill=0)
+
+
+def relay_draw_card(draw, box, title, outputs, scale=2):
+    x1, y1, x2, y2 = box
+    draw.rounded_rectangle(
+        (x1 * scale, y1 * scale, x2 * scale, y2 * scale),
+        radius=10 * scale,
+        outline=0,
+        width=3 * scale,
+    )
+    draw.rectangle((x1 * scale, y1 * scale, x2 * scale, (y1 + 38) * scale), fill=0)
+    relay_text_center(
+        draw,
+        (x1 * scale, y1 * scale, x2 * scale, (y1 + 38) * scale),
+        title.upper(),
+        relay_font(18, True, scale),
+        255,
+    )
+    available_height = y2 - y1 - 48
+    step = max(22, min(42, available_height // max(1, len(outputs))))
+    row_height = max(18, min(32, step - 4))
+    line_font_size = max(11, min(15, row_height - 7))
+    name_font_size = max(13, min(17, row_height - 6))
+    y = y1 + 46
+    for output in outputs:
+        draw.rounded_rectangle(
+            (
+                (x1 + 12) * scale,
+                y * scale,
+                (x1 + 66) * scale,
+                (y + row_height) * scale,
+            ),
+            radius=5 * scale,
+            fill=0,
+        )
+        relay_text_center(
+            draw,
+            (
+                (x1 + 12) * scale,
+                y * scale,
+                (x1 + 66) * scale,
+                (y + row_height) * scale,
+            ),
+            output["line"],
+            relay_font(line_font_size, True, scale),
+            255,
+        )
+        font = relay_fit_text(
+            draw,
+            output["name"],
+            (x2 - x1 - 96) * scale,
+            name_font_size,
+            11,
+            scale,
+        )
+        draw.text(((x1 + 78) * scale, (y + max(3, (row_height - name_font_size) // 2)) * scale), output["name"], font=font, fill=0)
+        y += step
+
+
+def relay_finalize(image, profile):
+    resized = image.resize((profile.width_dots, profile.height_dots), Image.Resampling.LANCZOS)
+    monochrome = ImageOps.autocontrast(resized.convert("L")).point(
+        lambda pixel: 0 if pixel < 180 else 255,
+        "1",
+    )
+    return apply_image_offset(monochrome, profile)
+
+
+def make_relay_label(relays):
+    profile = PROFILES["large_60x100"]
+    scale = 2
+    image = Image.new("L", (profile.width_dots * scale, profile.height_dots * scale), 255)
+    draw = ImageDraw.Draw(image)
+    relay_count = len(relays)
+
+    relay_draw_header(draw, image, scale)
+
+    if relay_count == 1:
+        draw.text((28 * scale, 238 * scale), "Назначение выходов реле:", font=relay_font(25, True, scale), fill=0)
+        y = 292
+        for output in relays[0]["outputs"]:
+            relay_draw_row(draw, 28, y, output["line"], output["name"], 58, scale)
+            y += 70
+        relay_draw_footer(draw, 638, scale)
+    elif relay_count == 2:
+        relay_draw_card(draw, (28, 246, 452, 430), relays[0]["title"], relays[0]["outputs"], scale)
+        relay_draw_card(draw, (28, 454, 452, 626), relays[1]["title"], relays[1]["outputs"], scale)
+        relay_draw_footer(draw, 650, scale)
+    else:
+        relay_draw_card(draw, (28, 232, 452, 346), relays[0]["title"], relays[0]["outputs"], scale)
+        relay_draw_card(draw, (28, 358, 452, 472), relays[1]["title"], relays[1]["outputs"], scale)
+        relay_draw_card(draw, (28, 484, 452, 630), relays[2]["title"], relays[2]["outputs"], scale)
+        relay_draw_footer(draw, 650, scale)
+
+    return relay_finalize(image, profile)
+
+
 def image_to_tspl(image, profile, copies):
     monochrome = image.convert("1")
     bitmap = bytearray()
@@ -608,6 +873,86 @@ def parse_template_request():
     return template_id, template, copies
 
 
+def normalize_relay_output(output, index):
+    default_line = f"L{index + 1}"
+    if isinstance(output, str):
+        line = default_line
+        name = output
+    elif isinstance(output, dict):
+        line = str(output.get("line", default_line)).strip().upper()
+        name = str(output.get("name", output.get("label", ""))).strip()
+    else:
+        raise ValueError("relay outputs must be strings or objects")
+
+    if not line:
+        line = default_line
+    if not name:
+        raise ValueError(f"{line} name must not be empty")
+    if len(line) > 4:
+        raise ValueError("output line must contain at most 4 characters")
+    if len(name) > 40:
+        raise ValueError("output name must contain at most 40 characters")
+    return {"line": line, "name": name}
+
+
+def normalize_relay(relay, index):
+    if not isinstance(relay, dict):
+        raise ValueError("each relay must be an object")
+
+    title = str(relay.get("title", relay.get("name", f"Реле {index + 1}"))).strip()
+    outputs = relay.get("outputs", relay.get("channels", []))
+
+    if isinstance(outputs, dict):
+        outputs = [
+            {"line": line, "name": name}
+            for line, name in outputs.items()
+        ]
+    if not isinstance(outputs, list):
+        raise ValueError("relay outputs must be a list or object")
+    if not outputs:
+        raise ValueError(f"{title or f'Реле {index + 1}'} must contain at least one output")
+    if len(outputs) > 4:
+        raise ValueError("each relay can contain at most 4 outputs")
+
+    normalized_outputs = [
+        normalize_relay_output(output, output_index)
+        for output_index, output in enumerate(outputs)
+    ]
+    return {
+        "title": title[:24] or f"Реле {index + 1}",
+        "outputs": normalized_outputs,
+    }
+
+
+def parse_relay_request():
+    body = get_request_data()
+    copies = int(body.get("copies", 1))
+    relays = body.get("relays", [])
+
+    if not 1 <= copies <= 20:
+        raise ValueError("copies must be between 1 and 20")
+    if not isinstance(relays, list):
+        raise ValueError("relays must be a list")
+    if not 1 <= len(relays) <= 3:
+        raise ValueError("relays must contain from 1 to 3 items")
+
+    normalized_relays = [
+        normalize_relay(relay, index)
+        for index, relay in enumerate(relays)
+    ]
+    relay_count = len(normalized_relays)
+    total_outputs = sum(len(relay["outputs"]) for relay in normalized_relays)
+    limits = RELAY_LIMITS[relay_count]
+
+    if total_outputs > limits["max_total_outputs"]:
+        raise ValueError(
+            f"too many outputs for {relay_count} relays: "
+            f"max {limits['max_total_outputs']} outputs total"
+        )
+
+    return normalized_relays, copies
+
+
 def png_response(image):
     output = io.BytesIO()
     image.convert("L").save(output, format="PNG")
@@ -722,6 +1067,7 @@ def health():
                 template_id: {"title": template["title"]}
                 for template_id, template in BUILTIN_TEMPLATES.items()
             },
+            "relay_limits": RELAY_LIMITS,
         }
     )
 
@@ -739,6 +1085,17 @@ def templates():
                 }
                 for template_id, template in BUILTIN_TEMPLATES.items()
             }
+        }
+    )
+
+
+@app.get("/relay-limits")
+def relay_limits():
+    return jsonify(
+        {
+            "profile": "large_60x100",
+            "limits": RELAY_LIMITS,
+            "output_lines": ["L1", "L2", "L3", "L4"],
         }
     )
 
@@ -804,6 +1161,17 @@ def preview_template():
     try:
         template_id, _, _ = parse_template_request()
         return png_response(make_builtin_template_label(template_id))
+    except (TypeError, ValueError) as error:
+        return jsonify({"error": str(error)}), 400
+
+
+@app.post("/preview-relay")
+def preview_relay():
+    if not authorized():
+        return jsonify({"error": "unauthorized"}), 401
+    try:
+        relays, _ = parse_relay_request()
+        return png_response(make_relay_label(relays))
     except (TypeError, ValueError) as error:
         return jsonify({"error": str(error)}), 400
 
@@ -930,6 +1298,30 @@ def print_template():
                 "profile": profile.name,
                 "template": template_id,
                 "title": template["title"],
+                "copies": copies,
+            }
+        )
+    except (TypeError, ValueError) as error:
+        return jsonify({"error": str(error)}), 400
+    except (RuntimeError, usb.core.USBError) as error:
+        return jsonify({"error": str(error)}), 503
+
+
+@app.post("/print-relay")
+def print_relay():
+    if not authorized():
+        return jsonify({"error": "unauthorized"}), 401
+    try:
+        relays, copies = parse_relay_request()
+        profile = PROFILES["large_60x100"]
+        payload = image_to_tspl(make_relay_label(relays), profile, copies)
+        with usb_lock:
+            send_usb(payload)
+        return jsonify(
+            {
+                "ok": True,
+                "profile": profile.name,
+                "relays": relays,
                 "copies": copies,
             }
         )

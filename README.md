@@ -67,6 +67,15 @@ rest_command:
         "template": {{ template | tojson }},
         "copies": {{ copies | default(1) | int }}
       }
+  xprinter_relay:
+    url: "http://HOME_ASSISTANT_IP:8099/print-relay"
+    method: POST
+    content_type: "application/json"
+    payload: >-
+      {
+        "relays": {{ relays | tojson }},
+        "copies": {{ copies | default(1) | int }}
+      }
 ```
 
 Restart Home Assistant after changing `configuration.yaml`.
@@ -181,6 +190,36 @@ curl -X POST http://HOME_ASSISTANT_IP:8099/preview-template \
   -H 'Content-Type: application/json' \
   -d '{"template":"sensor_panel"}' \
   --output sensor-panel-preview.png
+```
+
+Build and print a relay wiring label:
+
+```yaml
+action: rest_command.xprinter_relay
+data:
+  copies: 1
+  relays:
+    - title: "Реле 1"
+      outputs:
+        - "Узел коллектора"
+        - "Спальня"
+        - "Холл"
+        - "Мастер-санузел"
+```
+
+Relay constructor limits:
+
+- 1 relay: max 4 outputs
+- 2 relays: max 8 outputs total
+- 3 relays: max 9 outputs total
+
+Preview endpoint:
+
+```bash
+curl -X POST http://HOME_ASSISTANT_IP:8099/preview-relay \
+  -H 'Content-Type: application/json' \
+  -d '{"relays":[{"title":"Реле 1","outputs":["Узел","Спальня","Холл","Санузел"]}]}' \
+  --output relay-preview.png
 ```
 
 Preview and print uploaded files:

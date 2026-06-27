@@ -5,6 +5,7 @@ RUN apk add --no-cache \
     python3 \
     py3-pip \
     libusb \
+    poppler-utils \
     ttf-dejavu \
     && pip3 install --no-cache-dir --break-system-packages \
         Flask==3.1.1 \

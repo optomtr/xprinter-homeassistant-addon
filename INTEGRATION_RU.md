@@ -83,6 +83,10 @@ Content-Type: application/json
 URL или другой текст. Для уверенного считывания на этикетке 30x20 мм
 рекомендуется передавать короткое значение.
 
+Этот endpoint всегда печатает старый QR-макет 30x20 мм. Для новой бумаги
+60x100 мм используйте `/print-text` или `/print-file` с
+`profile: "large_60x100"`.
+
 Успешный ответ, HTTP `200`:
 
 ```json
@@ -170,6 +174,13 @@ curl -X POST http://homeassistant.local:8012/preview \
 Поддерживается английский и русский текст, потому что текст рендерится как
 изображение.
 
+Доступные профили бумаги:
+
+| profile | Размер | Зазор | Поведение цвета |
+| --- | --- | --- | --- |
+| `small_30x20` | 30x20 мм | из настроек add-on | старое поведение сохранено |
+| `large_60x100` | 60x100 мм | 4 мм по умолчанию | нормальный чёрный на белом |
+
 ### Запрос
 
 ```http
@@ -182,6 +193,7 @@ Content-Type: application/json
 ```json
 {
   "text": "Door opened",
+  "profile": "large_60x100",
   "copies": 1,
   "font_size": 22,
   "align": "center"
@@ -192,13 +204,15 @@ Content-Type: application/json
 
 | Поле | Тип | Обязательно | Ограничения |
 | --- | --- | --- | --- |
-| `text` | string | да | От 1 до 300 символов |
+| `text` | string | да | До 300 символов для `small_30x20`, до 2000 для `large_60x100` |
+| `profile` | string | нет | `small_30x20` или `large_60x100` |
 | `copies` | integer | нет | От 1 до 20, по умолчанию 1 |
-| `font_size` | integer | нет | От 10 до 48, по умолчанию 22 |
+| `font_size` | integer | нет | От 10 до 96, по умолчанию 22 |
 | `align` | string | нет | `left`, `center` или `right` |
 
 Текст автоматически переносится по строкам. Если текст не помещается, размер
-шрифта уменьшается автоматически, но не ниже 10.
+шрифта уменьшается автоматически, но не ниже 10. Для `large_60x100`
+допустимо до 2000 символов, для `small_30x20` до 300 символов.
 
 Пример:
 
@@ -207,9 +221,10 @@ curl -X POST http://homeassistant.local:8012/print-text \
   -H 'Content-Type: application/json' \
   -d '{
     "text": "Открыта входная дверь",
+    "profile": "large_60x100",
     "copies": 1,
-    "font_size": 22,
-    "align": "center"
+    "font_size": 42,
+    "align": "left"
   }'
 ```
 
@@ -218,9 +233,58 @@ curl -X POST http://homeassistant.local:8012/print-text \
 ```bash
 curl -X POST http://homeassistant.local:8012/preview-text \
   -H 'Content-Type: application/json' \
-  -d '{"text":"Открыта входная дверь","font_size":22,"align":"center"}' \
+  -d '{"text":"Открыта входная дверь","profile":"large_60x100","font_size":42,"align":"left"}' \
   --output text-preview.png
 ```
+
+## Печать загруженного файла
+
+Endpoint `/print-file` принимает файл и печатает его как изображение.
+Endpoint `/preview-file` принимает те же параметры, но возвращает PNG-превью
+без печати.
+
+Поддерживаемые форматы:
+
+- PDF, печатается первая страница;
+- PNG;
+- JPEG;
+- WebP;
+- другие изображения, которые распознаёт Pillow.
+
+### Multipart-запрос
+
+```bash
+curl -X POST http://homeassistant.local:8012/preview-file \
+  -F profile=large_60x100 \
+  -F fit=contain \
+  -F file=@document.pdf \
+  --output preview.png
+```
+
+```bash
+curl -X POST http://homeassistant.local:8012/print-file \
+  -F profile=large_60x100 \
+  -F fit=contain \
+  -F copies=1 \
+  -F file=@document.pdf
+```
+
+Поля:
+
+| Поле | Тип | Обязательно | Ограничения |
+| --- | --- | --- | --- |
+| `file` | file | да, если нет `file_base64` | До 8 MB |
+| `file_base64` | string | да, если нет `file` | Base64 файла |
+| `filename` | string | нет | Нужно для определения `.pdf` |
+| `content_type` | string | нет | Например `application/pdf` |
+| `profile` | string | нет | Обычно `large_60x100` |
+| `copies` | integer | нет | От 1 до 20 |
+| `fit` | string | нет | `contain`, `cover` или `stretch` |
+| `invert` | boolean | нет | Инвертирует само изображение перед печатью |
+
+Рекомендуемый режим для документов: `fit=contain`. Он сохраняет пропорции и
+оставляет поля. На большой бумаге применяется отступ `large_margin_mm`, по
+умолчанию 4 мм.
 
 ## Авторизация
 
@@ -269,6 +333,7 @@ rest_command:
     payload: >-
       {
         "text": {{ text | tojson }},
+        "profile": {{ profile | default("small_30x20") | tojson }},
         "copies": {{ copies | default(1) | int }},
         "font_size": {{ font_size | default(22) | int }},
         "align": {{ align | default("center") | tojson }}
@@ -305,9 +370,10 @@ actions:
 action: rest_command.xprinter_text
 data:
   text: "Открыта входная дверь"
+  profile: "large_60x100"
   copies: 1
-  font_size: 22
-  align: "center"
+  font_size: 42
+  align: "left"
 ```
 
 ## Ошибки
@@ -349,11 +415,19 @@ data:
 label_height_mm: 20.0
 gap_mm: 2.0
 image_offset_dots: 0
+large_label_height_mm: 100.0
+large_gap_mm: 4.0
+large_margin_mm: 4.0
+large_image_offset_dots: 0
 ```
 
 - `label_height_mm` — высота этикетки по направлению подачи.
 - `gap_mm` — фактический зазор между этикетками.
 - `image_offset_dots` — постоянный сдвиг макета; плюс вниз, минус вверх.
+- `large_label_height_mm` — высота большой этикетки по направлению подачи.
+- `large_gap_mm` — зазор между большими этикетками.
+- `large_margin_mm` — отступ от края большой этикетки.
+- `large_image_offset_dots` — постоянный сдвиг большого макета.
 - При 203 DPI примерно 8 точек соответствуют 1 мм.
 
 Эти значения обслуживает администратор принтера. Интегратор не должен
@@ -364,7 +438,9 @@ image_offset_dots: 0
 Калибровка запускается только после замены типа рулона или потери положения:
 
 ```bash
-curl -X POST http://homeassistant.local:8012/calibrate
+curl -X POST http://homeassistant.local:8012/calibrate \
+  -H 'Content-Type: application/json' \
+  -d '{"profile":"large_60x100"}'
 ```
 
 Во время калибровки принтер может протянуть несколько этикеток. Не следует

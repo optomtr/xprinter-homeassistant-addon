@@ -2,14 +2,29 @@ configuration:
   api_key:
     name: API key
     description: Optional key expected in the X-API-Key request header.
+  default_profile:
+    name: Default label profile
+    description: Paper profile used when a request does not specify profile.
   label_height_mm:
-    name: Label height
-    description: Label length in the paper feed direction, in millimeters.
+    name: Small label height
+    description: Small 30x20 label length in the paper feed direction, in millimeters.
   gap_mm:
-    name: Label gap
-    description: Physical gap between consecutive labels, in millimeters.
+    name: Small label gap
+    description: Physical gap between consecutive small labels, in millimeters.
   image_offset_dots:
-    name: Vertical image offset
-    description: Positive values move the design down; negative values move it up.
+    name: Small vertical image offset
+    description: Positive values move the small-label design down; negative values move it up.
+  large_label_height_mm:
+    name: Large label height
+    description: Large label length in the paper feed direction, in millimeters.
+  large_gap_mm:
+    name: Large label gap
+    description: Physical gap between consecutive large labels, in millimeters.
+  large_margin_mm:
+    name: Large label margin
+    description: White margin kept around uploaded files and text on large labels, in millimeters.
+  large_image_offset_dots:
+    name: Large vertical image offset
+    description: Positive values move the large-label design down; negative values move it up.
 network:
   8099/tcp: HTTP printing API

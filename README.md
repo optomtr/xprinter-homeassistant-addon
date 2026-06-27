@@ -53,6 +53,7 @@ rest_command:
     payload: >-
       {
         "text": {{ text | tojson }},
+        "profile": {{ profile | default("small_30x20") | tojson }},
         "copies": {{ copies | default(1) | int }},
         "font_size": {{ font_size | default(22) | int }},
         "align": {{ align | default("center") | tojson }}
@@ -88,11 +89,16 @@ extra blank label.
 
 Open the add-on **Configuration** tab and adjust:
 
+- `default_profile`: used when a request does not send `profile`.
 - `label_height_mm`: physical label length in the feed direction. Default `20`.
 - `gap_mm`: physical gap between labels. Default `2`.
 - `image_offset_dots`: moves the complete design inside the label. Positive
   values move it down, negative values move it up. At 203 DPI, 8 dots are
   approximately 1 mm.
+- `large_label_height_mm`: large label height. Default `100`.
+- `large_gap_mm`: large label gap. Default `4`.
+- `large_margin_mm`: large label printable margin. Default `4`.
+- `large_image_offset_dots`: vertical offset for large labels.
 
 Save and restart the add-on after changing a value. For cumulative drift, tune
 `gap_mm` first in steps of `0.1` mm. Use `image_offset_dots` only when every
@@ -113,6 +119,7 @@ Print a free-form text label:
 action: rest_command.xprinter_text
 data:
   text: "Door opened"
+  profile: "small_30x20"
   copies: 1
   font_size: 22
   align: "center"
@@ -120,3 +127,35 @@ data:
 
 `/print-text` supports Cyrillic and English text because the label is rendered
 as an image before printing. Maximum text length is 300 characters.
+
+Print text on the 60x100 mm label:
+
+```yaml
+action: rest_command.xprinter_text
+data:
+  text: "Service report\nApartment 24\nCompleted"
+  profile: "large_60x100"
+  copies: 1
+  font_size: 42
+  align: "left"
+```
+
+Preview and print uploaded files:
+
+```bash
+curl -X POST http://HOME_ASSISTANT_IP:8099/preview-file \
+  -F profile=large_60x100 \
+  -F fit=contain \
+  -F file=@document.pdf \
+  --output preview.png
+
+curl -X POST http://HOME_ASSISTANT_IP:8099/print-file \
+  -F profile=large_60x100 \
+  -F fit=contain \
+  -F copies=1 \
+  -F file=@document.pdf
+```
+
+Supported upload formats: PDF first page, PNG, JPEG, WebP, and other formats
+that Pillow can read. The 30x20 QR label keeps its legacy color behavior; the
+60x100 profile previews and prints with normal black-on-white polarity.

@@ -15,5 +15,6 @@ RUN apk add --no-cache \
 
 COPY app.py /app.py
 COPY template.png /template.png
+COPY templates /templates
 
 CMD ["python3", "/app.py"]

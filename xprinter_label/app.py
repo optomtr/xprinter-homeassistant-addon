@@ -24,6 +24,7 @@ DOTS_PER_MM = 8
 FONT_PATH = "/usr/share/fonts/ttf-dejavu/DejaVuSans-Bold.ttf"
 OPTIONS_PATH = "/data/options.json"
 SMALL_TEMPLATE_PATH = "/template.png"
+BUILTIN_TEMPLATE_DIR = Path("/templates")
 
 app = Flask(__name__)
 usb_lock = threading.Lock()
@@ -99,6 +100,36 @@ def build_profiles():
 
 
 PROFILES = build_profiles()
+BUILTIN_TEMPLATES = {
+    "sensor_panel": {
+        "title": "Питание сенсорной панели",
+        "filename": "sensor_panel.jpg",
+    },
+    "curtain": {
+        "title": "Питание электрокарниза",
+        "filename": "curtain.jpg",
+    },
+    "speaker": {
+        "title": "Колонка",
+        "filename": "speaker.jpg",
+    },
+    "thermostat": {
+        "title": "Питание терморегулятора",
+        "filename": "thermostat.jpg",
+    },
+    "yandex_station": {
+        "title": "Питание Яндекс Станции",
+        "filename": "yandex_station.jpg",
+    },
+    "amplifier": {
+        "title": "Усилитель",
+        "filename": "amplifier.jpg",
+    },
+    "motion_sensor": {
+        "title": "Питание датчика движения/присутствия",
+        "filename": "motion_sensor.jpg",
+    },
+}
 
 
 def authorized():
@@ -365,6 +396,36 @@ def make_file_label(data, filename, content_type, profile, fit="contain", invert
     return apply_image_offset(label, profile)
 
 
+def get_builtin_template(template_id):
+    template_id = str(template_id or "").strip()
+    if template_id not in BUILTIN_TEMPLATES:
+        raise ValueError(
+            f"template must be one of: {', '.join(sorted(BUILTIN_TEMPLATES.keys()))}"
+        )
+    return template_id, BUILTIN_TEMPLATES[template_id]
+
+
+def make_builtin_template_label(template_id):
+    template_id, template = get_builtin_template(template_id)
+    profile = PROFILES["large_60x100"]
+    image_path = BUILTIN_TEMPLATE_DIR / template["filename"]
+    if not image_path.exists():
+        raise ValueError(f"template asset is missing: {template_id}")
+
+    source = Image.open(image_path)
+    source.load()
+    source = to_monochrome(source, False)
+    label = Image.new("1", (profile.width_dots, profile.height_dots), 1)
+    fitted = fit_image_to_box(
+        source,
+        profile.width_dots,
+        profile.height_dots,
+        "stretch",
+    )
+    label.paste(fitted, (0, 0))
+    return apply_image_offset(label, profile)
+
+
 def image_to_tspl(image, profile, copies):
     monochrome = image.convert("1")
     bitmap = bytearray()
@@ -515,6 +576,18 @@ def parse_file_request():
     return data, filename, content_type, profile, copies, fit, invert_image
 
 
+def parse_template_request():
+    body = get_request_data()
+    template_id = str(body.get("template", body.get("template_id", ""))).strip()
+    copies = int(body.get("copies", 1))
+
+    if not 1 <= copies <= 20:
+        raise ValueError("copies must be between 1 and 20")
+
+    template_id, template = get_builtin_template(template_id)
+    return template_id, template, copies
+
+
 def png_response(image):
     output = io.BytesIO()
     image.convert("L").save(output, format="PNG")
@@ -524,6 +597,10 @@ def png_response(image):
 
 @app.get("/")
 def index():
+    template_options = "\n".join(
+        f'<option value="{template_id}">{template["title"]}</option>'
+        for template_id, template in BUILTIN_TEMPLATES.items()
+    )
     return """
 <!doctype html>
 <html lang="ru">
@@ -532,6 +609,27 @@ def index():
 <body style="font-family: system-ui, sans-serif; max-width: 760px; margin: 32px auto;">
   <h1>Xprinter Label</h1>
   <p>Use this page for quick file previews and manual file printing. The API is intended for automation.</p>
+  <form action="/preview-template" method="post">
+    <h2>Preview default label</h2>
+    <label>Template:
+      <select name="template">
+        __TEMPLATE_OPTIONS__
+      </select>
+    </label>
+    <p><button type="submit">Preview</button></p>
+  </form>
+  <form action="/print-template" method="post">
+    <h2>Print default label</h2>
+    <label>Template:
+      <select name="template">
+        __TEMPLATE_OPTIONS__
+      </select>
+    </label>
+    <label>Copies:
+      <input name="copies" type="number" value="1" min="1" max="20">
+    </label>
+    <p><button type="submit">Print</button></p>
+  </form>
   <form action="/preview-file" method="post" enctype="multipart/form-data">
     <h2>Preview uploaded file</h2>
     <label>Profile:
@@ -573,7 +671,7 @@ def index():
   </form>
 </body>
 </html>
-"""
+""".replace("__TEMPLATE_OPTIONS__", template_options)
 
 
 @app.get("/health")
@@ -596,6 +694,27 @@ def health():
                 }
                 for name, profile in PROFILES.items()
             },
+            "templates": {
+                template_id: {"title": template["title"]}
+                for template_id, template in BUILTIN_TEMPLATES.items()
+            },
+        }
+    )
+
+
+@app.get("/templates")
+def templates():
+    return jsonify(
+        {
+            "templates": {
+                template_id: {
+                    "title": template["title"],
+                    "profile": "large_60x100",
+                    "width_mm": PROFILES["large_60x100"].width_mm,
+                    "height_mm": PROFILES["large_60x100"].height_mm,
+                }
+                for template_id, template in BUILTIN_TEMPLATES.items()
+            }
         }
     )
 
@@ -632,6 +751,17 @@ def preview_file():
             make_file_label(data, filename, content_type, profile, fit, invert_image)
         )
     except (TypeError, ValueError, subprocess.CalledProcessError) as error:
+        return jsonify({"error": str(error)}), 400
+
+
+@app.post("/preview-template")
+def preview_template():
+    if not authorized():
+        return jsonify({"error": "unauthorized"}), 401
+    try:
+        template_id, _, _ = parse_template_request()
+        return png_response(make_builtin_template_label(template_id))
+    except (TypeError, ValueError) as error:
         return jsonify({"error": str(error)}), 400
 
 
@@ -711,6 +841,35 @@ def print_file():
             }
         )
     except (TypeError, ValueError, subprocess.CalledProcessError) as error:
+        return jsonify({"error": str(error)}), 400
+    except (RuntimeError, usb.core.USBError) as error:
+        return jsonify({"error": str(error)}), 503
+
+
+@app.post("/print-template")
+def print_template():
+    if not authorized():
+        return jsonify({"error": "unauthorized"}), 401
+    try:
+        template_id, template, copies = parse_template_request()
+        profile = PROFILES["large_60x100"]
+        payload = image_to_tspl(
+            make_builtin_template_label(template_id),
+            profile,
+            copies,
+        )
+        with usb_lock:
+            send_usb(payload)
+        return jsonify(
+            {
+                "ok": True,
+                "profile": profile.name,
+                "template": template_id,
+                "title": template["title"],
+                "copies": copies,
+            }
+        )
+    except (TypeError, ValueError) as error:
         return jsonify({"error": str(error)}), 400
     except (RuntimeError, usb.core.USBError) as error:
         return jsonify({"error": str(error)}), 503

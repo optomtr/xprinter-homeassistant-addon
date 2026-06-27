@@ -286,6 +286,58 @@ curl -X POST http://homeassistant.local:8012/print-file \
 оставляет поля. На большой бумаге применяется отступ `large_margin_mm`, по
 умолчанию 4 мм.
 
+## Печать встроенных BMS-этикеток
+
+Эти шаблоны уже лежат внутри add-on и печатаются на бумаге `large_60x100`.
+Загружать файл при каждом вызове не нужно.
+
+Список шаблонов:
+
+| template | Название |
+| --- | --- |
+| `sensor_panel` | Питание сенсорной панели |
+| `curtain` | Питание электрокарниза |
+| `speaker` | Колонка |
+| `thermostat` | Питание терморегулятора |
+| `yandex_station` | Питание Яндекс Станции |
+| `amplifier` | Усилитель |
+| `motion_sensor` | Питание датчика движения/присутствия |
+
+Получить список через API:
+
+```bash
+curl http://homeassistant.local:8012/templates
+```
+
+Предпросмотр:
+
+```bash
+curl -X POST http://homeassistant.local:8012/preview-template \
+  -H 'Content-Type: application/json' \
+  -d '{"template":"sensor_panel"}' \
+  --output sensor-panel-preview.png
+```
+
+Печать:
+
+```bash
+curl -X POST http://homeassistant.local:8012/print-template \
+  -H 'Content-Type: application/json' \
+  -d '{"template":"sensor_panel","copies":1}'
+```
+
+Ответ:
+
+```json
+{
+  "ok": true,
+  "profile": "large_60x100",
+  "template": "sensor_panel",
+  "title": "Питание сенсорной панели",
+  "copies": 1
+}
+```
+
 ## Авторизация
 
 В настройках add-on можно задать `api_key`. Если ключ задан, запросы
@@ -338,6 +390,15 @@ rest_command:
         "font_size": {{ font_size | default(22) | int }},
         "align": {{ align | default("center") | tojson }}
       }
+  xprinter_template:
+    url: "http://homeassistant.local:8012/print-template"
+    method: POST
+    content_type: "application/json"
+    payload: >-
+      {
+        "template": {{ template | tojson }},
+        "copies": {{ copies | default(1) | int }}
+      }
 ```
 
 После изменения конфигурации необходимо перезапустить Home Assistant.
@@ -374,6 +435,15 @@ data:
   copies: 1
   font_size: 42
   align: "left"
+```
+
+Пример печати встроенной BMS-этикетки:
+
+```yaml
+action: rest_command.xprinter_template
+data:
+  template: "sensor_panel"
+  copies: 1
 ```
 
 ## Ошибки

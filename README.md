@@ -58,6 +58,15 @@ rest_command:
         "font_size": {{ font_size | default(22) | int }},
         "align": {{ align | default("center") | tojson }}
       }
+  xprinter_template:
+    url: "http://HOME_ASSISTANT_IP:8099/print-template"
+    method: POST
+    content_type: "application/json"
+    payload: >-
+      {
+        "template": {{ template | tojson }},
+        "copies": {{ copies | default(1) | int }}
+      }
 ```
 
 Restart Home Assistant after changing `configuration.yaml`.
@@ -138,6 +147,34 @@ data:
   copies: 1
   font_size: 42
   align: "left"
+```
+
+Print a built-in 60x100 mm BMS label:
+
+```yaml
+action: rest_command.xprinter_template
+data:
+  template: "sensor_panel"
+  copies: 1
+```
+
+Built-in templates:
+
+- `sensor_panel`: Питание сенсорной панели
+- `curtain`: Питание электрокарниза
+- `speaker`: Колонка
+- `thermostat`: Питание терморегулятора
+- `yandex_station`: Питание Яндекс Станции
+- `amplifier`: Усилитель
+- `motion_sensor`: Питание датчика движения/присутствия
+
+Preview a built-in label:
+
+```bash
+curl -X POST http://HOME_ASSISTANT_IP:8099/preview-template \
+  -H 'Content-Type: application/json' \
+  -d '{"template":"sensor_panel"}' \
+  --output sensor-panel-preview.png
 ```
 
 Preview and print uploaded files:

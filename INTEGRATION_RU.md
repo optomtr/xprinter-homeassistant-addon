@@ -383,6 +383,15 @@ curl -X POST http://homeassistant.local:8012/print-template \
 curl http://homeassistant.local:8012/relay-limits
 ```
 
+Ответ также содержит список иконок для выходов:
+
+| icon | Значение |
+| --- | --- |
+| `none` | Без иконки |
+| `radiator` | Радиатор |
+| `floor` | Тёплый пол |
+| `convector` | Конвектор |
+
 ### Предпросмотр
 
 ```http
@@ -477,11 +486,13 @@ curl -X POST http://homeassistant.local:8012/preview-relay \
       "outputs": [
         {
           "line": "L1",
-          "name": "Узел коллектора"
+          "name": "Узел коллектора",
+          "icon": "floor"
         },
         {
           "line": "L2",
-          "name": "Спальня"
+          "name": "Спальня",
+          "icon": "radiator"
         }
       ]
     }
@@ -515,6 +526,10 @@ curl -X POST http://homeassistant.local:8012/preview-relay \
 | `relays[].outputs` | array/object | да | От 1 до 4 выходов на реле |
 | `line` | string | нет | До 4 символов, например `L1` |
 | `name` | string | да | До 40 символов |
+| `icon` | string | нет | `none`, `radiator`, `floor`, `convector` |
+
+Если `icon` не передан, используется `none`, то есть выход рисуется без
+иконки. В сокращённом формате строк иконки не используются.
 
 ### Ошибка превышения лимита
 
@@ -668,6 +683,26 @@ data:
         - "Спальня"
         - "Холл"
         - "Мастер-санузел"
+```
+
+Пример с иконками выходов:
+
+```yaml
+action: rest_command.xprinter_relay
+data:
+  copies: 1
+  relays:
+    - title: "Реле 1"
+      outputs:
+        - line: "L1"
+          name: "Спальня"
+          icon: "floor"
+        - line: "L2"
+          name: "Холл"
+          icon: "radiator"
+        - line: "L3"
+          name: "Кухня"
+          icon: "convector"
 ```
 
 ## Ошибки

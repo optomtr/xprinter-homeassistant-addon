@@ -207,6 +207,28 @@ data:
         - "Мастер-санузел"
 ```
 
+Use output icons with object syntax:
+
+```yaml
+action: rest_command.xprinter_relay
+data:
+  copies: 1
+  relays:
+    - title: "Реле 1"
+      outputs:
+        - line: "L1"
+          name: "Спальня"
+          icon: "floor"
+        - line: "L2"
+          name: "Холл"
+          icon: "radiator"
+        - line: "L3"
+          name: "Кухня"
+          icon: "convector"
+```
+
+Supported relay output icons: `none`, `radiator`, `floor`, `convector`.
+
 Relay constructor limits:
 
 - 1 relay: max 4 outputs

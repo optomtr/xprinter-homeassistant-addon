@@ -141,6 +141,12 @@ RELAY_LIMITS = {
     2: {"max_total_outputs": 8, "max_outputs_per_relay": 4},
     3: {"max_total_outputs": 9, "max_outputs_per_relay": 4},
 }
+RELAY_ICONS = {
+    "none": "Без иконки",
+    "radiator": "Радиатор",
+    "floor": "Тёплый пол",
+    "convector": "Конвектор",
+}
 
 
 def authorized():
@@ -476,6 +482,55 @@ def relay_fit_text(draw, text, max_width, start_size, min_size=10, scale=2):
     return relay_font(min_size, True, scale)
 
 
+def relay_draw_output_icon(draw, icon, box, scale=2):
+    icon = str(icon or "none").strip().lower()
+    if icon in {"", "none"}:
+        return
+
+    x1, y1, x2, y2 = box
+    x1 *= scale
+    y1 *= scale
+    x2 *= scale
+    y2 *= scale
+    width = x2 - x1
+    height = y2 - y1
+    cx = (x1 + x2) // 2
+    cy = (y1 + y2) // 2
+
+    if icon == "radiator":
+        draw.rounded_rectangle((x1 + 3 * scale, y1 + 6 * scale, x2 - 3 * scale, y2 - 6 * scale), radius=3 * scale, outline=0, width=2 * scale)
+        for idx in range(4):
+            x = x1 + (8 + idx * 8) * scale
+            draw.line((x, y1 + 8 * scale, x, y2 - 8 * scale), fill=0, width=2 * scale)
+        draw.line((x1 + 2 * scale, y2 - 5 * scale, x2 - 2 * scale, y2 - 5 * scale), fill=0, width=2 * scale)
+    elif icon == "floor":
+        for idx, offset in enumerate((-12, 0, 12)):
+            y = cy + offset * scale
+            draw.arc(
+                (x1 + 3 * scale, y - 11 * scale, x2 - 3 * scale, y + 11 * scale),
+                start=200,
+                end=340,
+                fill=0,
+                width=2 * scale,
+            )
+        draw.line((x1 + 5 * scale, y2 - 5 * scale, x2 - 5 * scale, y2 - 5 * scale), fill=0, width=2 * scale)
+    elif icon == "convector":
+        draw.rounded_rectangle((x1 + 3 * scale, y1 + 8 * scale, x2 - 3 * scale, y2 - 5 * scale), radius=4 * scale, outline=0, width=2 * scale)
+        for idx in range(3):
+            x = x1 + (10 + idx * 10) * scale
+            draw.line((x, y1 + 13 * scale, x, y2 - 10 * scale), fill=0, width=2 * scale)
+        draw.polygon(
+            [
+                (cx - 10 * scale, y1 + 4 * scale),
+                (cx, y1 - 2 * scale),
+                (cx + 10 * scale, y1 + 4 * scale),
+            ],
+            outline=0,
+        )
+    else:
+        raise ValueError(f"unknown relay output icon: {icon}")
+
+
 def relay_draw_header(draw, image, scale=2):
     template_path = BUILTIN_TEMPLATE_DIR / "yandex_station.jpg"
     if template_path.exists():
@@ -601,14 +656,22 @@ def relay_draw_row(draw, x, y, line, name, row_height=58, scale=2):
         relay_font(24, True, scale),
         255,
     )
+    icon = name.get("icon", "none") if isinstance(name, dict) else "none"
+    output_name = name.get("name", "") if isinstance(name, dict) else name
+    has_icon = icon not in {"", "none", None}
+    name_box_x = x + (128 if has_icon else 82)
+
+    if has_icon:
+        relay_draw_output_icon(draw, icon, (x + 82, y + 8, x + 122, y + row_height - 8), scale)
+
     draw.rounded_rectangle(
-        ((x + 82) * scale, y * scale, 452 * scale, (y + row_height) * scale),
+        (name_box_x * scale, y * scale, 452 * scale, (y + row_height) * scale),
         radius=6 * scale,
         outline=0,
         width=3 * scale,
     )
-    font = relay_fit_text(draw, name, 350 * scale, 25, 15, scale)
-    draw.text(((x + 96) * scale, (y + 11) * scale), name, font=font, fill=0)
+    font = relay_fit_text(draw, output_name, (452 - name_box_x - 14) * scale, 25, 15, scale)
+    draw.text(((name_box_x + 14) * scale, (y + 11) * scale), output_name, font=font, fill=0)
 
 
 def relay_draw_card(draw, box, title, outputs, scale=2):
@@ -656,15 +719,25 @@ def relay_draw_card(draw, box, title, outputs, scale=2):
             relay_font(line_font_size, True, scale),
             255,
         )
+        has_icon = output.get("icon", "none") != "none"
+        text_x = x1 + (112 if has_icon else 78)
+        if has_icon:
+            relay_draw_output_icon(
+                draw,
+                output.get("icon"),
+                (x1 + 70, y + 2, x1 + 106, y + row_height - 2),
+                scale,
+            )
+
         font = relay_fit_text(
             draw,
             output["name"],
-            (x2 - x1 - 96) * scale,
+            (x2 - text_x - 12) * scale,
             name_font_size,
             11,
             scale,
         )
-        draw.text(((x1 + 78) * scale, (y + max(3, (row_height - name_font_size) // 2)) * scale), output["name"], font=font, fill=0)
+        draw.text((text_x * scale, (y + max(3, (row_height - name_font_size) // 2)) * scale), output["name"], font=font, fill=0)
         y += step
 
 
@@ -690,7 +763,7 @@ def make_relay_label(relays):
         draw.text((28 * scale, 238 * scale), "Назначение выходов реле:", font=relay_font(25, True, scale), fill=0)
         y = 292
         for output in relays[0]["outputs"]:
-            relay_draw_row(draw, 28, y, output["line"], output["name"], 58, scale)
+            relay_draw_row(draw, 28, y, output["line"], output, 58, scale)
             y += 70
         relay_draw_footer(draw, 638, scale)
     elif relay_count == 2:
@@ -878,9 +951,11 @@ def normalize_relay_output(output, index):
     if isinstance(output, str):
         line = default_line
         name = output
+        icon = "none"
     elif isinstance(output, dict):
         line = str(output.get("line", default_line)).strip().upper()
         name = str(output.get("name", output.get("label", ""))).strip()
+        icon = str(output.get("icon", "none")).strip().lower()
     else:
         raise ValueError("relay outputs must be strings or objects")
 
@@ -892,7 +967,11 @@ def normalize_relay_output(output, index):
         raise ValueError("output line must contain at most 4 characters")
     if len(name) > 40:
         raise ValueError("output name must contain at most 40 characters")
-    return {"line": line, "name": name}
+    if icon not in RELAY_ICONS:
+        raise ValueError(
+            f"icon must be one of: {', '.join(sorted(RELAY_ICONS.keys()))}"
+        )
+    return {"line": line, "name": name, "icon": icon}
 
 
 def normalize_relay(relay, index):
@@ -1096,6 +1175,7 @@ def relay_limits():
             "profile": "large_60x100",
             "limits": RELAY_LIMITS,
             "output_lines": ["L1", "L2", "L3", "L4"],
+            "icons": RELAY_ICONS,
         }
     )
 

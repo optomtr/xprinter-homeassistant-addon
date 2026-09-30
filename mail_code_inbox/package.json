@@ -1,0 +1,21 @@
+{
+  "name": "mail-code-inbox",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "start": "node --env-file-if-exists=.env main.js",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "better-sqlite3": "13.0.3",
+    "postal-mime": "4.0.2",
+    "smtp-server": "3.19.16"
+  },
+  "devDependencies": {
+    "nodemailer": "^10.0.9"
+  }
+}

@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>Почта для кодов</title>
+  <link rel="stylesheet" href="/style.css">
+  <script defer src="/app.js"></script>
+</head>
+<body>
+  <div id="loginView" class="login-screen" hidden>
+    <div class="login-card">
+      <div class="mark">✳</div>
+      <p class="eyebrow">Личный почтовый шлюз</p>
+      <h1>Коды под рукой.</h1>
+      <p class="muted">Создавайте адреса и смотрите входящие письма в одном месте.</p>
+      <form id="loginForm" class="login-form">
+        <label for="password">Пароль администратора</label>
+        <input id="password" name="password" type="password" autocomplete="current-password" required autofocus>
+        <button type="submit" class="primary">Войти</button>
+      </form>
+      <p id="loginError" class="error" role="alert"></p>
+    </div>
+  </div>
+
+  <div id="appView" class="shell" hidden>
+    <aside class="sidebar">
+      <div class="brand"><span class="brand-mark">✳</span><span>Code Inbox</span></div>
+      <div class="sidebar-heading"><span>Адреса</span><span id="addressCount" class="count">0</span></div>
+      <nav id="addressList" class="address-list" aria-label="Почтовые адреса"></nav>
+      <button id="newAddressButton" class="new-address" type="button"><span>＋</span> Новый адрес</button>
+      <div class="sidebar-bottom">
+        <div id="domainLabel" class="domain-label"></div>
+        <button id="logoutButton" class="text-button" type="button">Выйти</button>
+      </div>
+    </aside>
+
+    <main class="main">
+      <div class="topbar"><span>ВХОДЯЩИЕ</span><span id="refreshStatus">Обновляется автоматически</span></div>
+      <header class="page-head">
+        <div>
+          <p id="mailboxOverline" class="eyebrow">Все адреса</p>
+          <h1 id="mailboxTitle">Входящие письма</h1>
+          <p id="mailboxSubtitle" class="muted">Коды из писем появятся здесь сразу после доставки.</p>
+        </div>
+        <div class="head-actions">
+          <button id="copyAddressButton" class="secondary" type="button" hidden>Скопировать адрес</button>
+          <button id="toggleAddressButton" class="secondary danger" type="button" hidden></button>
+          <button id="refreshButton" class="icon-button" type="button" title="Обновить" aria-label="Обновить">↻</button>
+        </div>
+      </header>
+      <div id="notice" class="notice" role="status" hidden></div>
+      <section id="messageList" class="message-list" aria-label="Входящие письма"></section>
+    </main>
+  </div>
+
+  <dialog id="newAddressDialog" class="dialog">
+    <form id="newAddressForm" method="dialog">
+      <div class="dialog-header">
+        <div><p class="eyebrow">НОВЫЙ АДРЕС</p><h2>Куда придёт код?</h2></div>
+        <button id="closeDialogButton" type="button" class="icon-button" aria-label="Закрыть">×</button>
+      </div>
+      <label for="localPart">Имя адреса</label>
+      <div class="address-input"><input id="localPart" name="localPart" spellcheck="false" autocomplete="off" required placeholder="alice"><span id="addressSuffix"></span></div>
+      <p class="hint">Латинские буквы, цифры, точка, дефис или подчёркивание.</p>
+      <label for="addressLabel">Заметка <span class="optional">необязательно</span></label>
+      <input id="addressLabel" name="label" maxlength="100" placeholder="Например, регистрация в SmartLab">
+      <p id="createError" class="error" role="alert"></p>
+      <div class="dialog-actions"><button id="cancelDialogButton" class="secondary" type="button">Отмена</button><button class="primary" type="submit">Создать адрес</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="messageDialog" class="dialog message-dialog">
+    <div class="dialog-header">
+      <div><p class="eyebrow">ПИСЬМО</p><h2 id="detailSubject"></h2></div>
+      <button id="closeMessageButton" type="button" class="icon-button" aria-label="Закрыть">×</button>
+    </div>
+    <div id="detailMeta" class="detail-meta"></div>
+    <div id="detailCode" class="detail-code" hidden><span>Найденный код</span><strong id="detailCodeValue"></strong><button id="copyCodeButton" class="secondary" type="button">Скопировать</button></div>
+    <pre id="detailBody" class="detail-body"></pre>
+    <div class="dialog-actions"><button id="deleteMessageButton" class="text-button danger" type="button">Удалить письмо</button></div>
+  </dialog>
+</body>
+</html>

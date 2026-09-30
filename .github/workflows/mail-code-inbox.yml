@@ -1,0 +1,36 @@
+name: Mail Code Inbox
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/mail-code-inbox.yml'
+      - 'mail_code_inbox/**'
+      - 'integration/bms-erp-client.cjs'
+  pull_request:
+    paths:
+      - '.github/workflows/mail-code-inbox.yml'
+      - 'mail_code_inbox/**'
+      - 'integration/bms-erp-client.cjs'
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: mail_code_inbox/package-lock.json
+      - name: Check app version
+        run: |
+          node -e "const fs=require('fs'); const pkg=require('./mail_code_inbox/package.json'); const config=fs.readFileSync('./mail_code_inbox/config.yaml','utf8'); if (!config.includes('version: \"'+pkg.version+'\"')) process.exit(1)"
+      - name: Install dependencies
+        run: npm ci
+        working-directory: mail_code_inbox
+      - name: Test email and ERP API
+        run: npm test
+        working-directory: mail_code_inbox
+      - name: Build Home Assistant image
+        run: docker build --build-arg BUILD_ARCH=amd64 --build-arg BUILD_VERSION=$(node -p "require('./mail_code_inbox/package.json').version") mail_code_inbox

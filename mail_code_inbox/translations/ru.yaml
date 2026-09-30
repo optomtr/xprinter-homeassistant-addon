@@ -1,0 +1,22 @@
+configuration:
+  mail_domain:
+    name: Почтовый домен
+    description: Домен создаваемых адресов, например mail.bmssmart.uz
+  admin_password:
+    name: Пароль веб-интерфейса
+    description: Не менее 12 символов
+  api_key:
+    name: Ключ API для ERP
+    description: Отдельный секретный ключ не короче 24 символов
+  retention_days:
+    name: Срок хранения писем
+    description: Число дней; 0 отключает автоматическую очистку
+  smtp_tls_cert:
+    name: Сертификат SMTP
+    description: Путь в /ssl к сертификату для STARTTLS
+  smtp_tls_key:
+    name: Ключ SMTP
+    description: Путь в /ssl к приватному ключу для STARTTLS
+network:
+  3000/TCP: Веб-интерфейс и API для ERP
+  2525/TCP: Входящий SMTP, внешняя доставка на порт 25

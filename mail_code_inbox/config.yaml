@@ -1,0 +1,31 @@
+name: Mail Code Inbox
+version: "0.2.0"
+slug: mail_code_inbox
+description: Receive registration emails and verification codes on mail.bmssmart.uz
+arch:
+  - aarch64
+  - amd64
+startup: application
+boot: auto
+init: false
+map:
+  - ssl
+webui: http://[HOST]:[PORT:3000]
+ports:
+  3000/tcp: 3010
+  2525/tcp: 25
+ports_description:
+  3000/tcp: Web interface and BMS ERP API
+  2525/tcp: Incoming SMTP from the Internet
+options:
+  mail_domain: mail.bmssmart.uz
+  admin_password: ""
+  api_key: ""
+  retention_days: 30
+schema:
+  mail_domain: str
+  admin_password: password
+  api_key: password
+  retention_days: "int(0,3650)"
+  smtp_tls_cert: "str?"
+  smtp_tls_key: "str?"

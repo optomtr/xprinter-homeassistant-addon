@@ -1,9 +1,11 @@
-# Xprinter XP-365B for Home Assistant Green
+# BMS Home Assistant Apps
 
-Local Home Assistant add-on for printing 30x20 mm labels through USB.
+This repository contains two Home Assistant apps:
 
-Russian API documentation for integrators:
-[INTEGRATION_RU.md](INTEGRATION_RU.md).
+- **Xprinter Label** prints labels on the USB Xprinter XP-365B. See [printer integration](INTEGRATION_RU.md).
+- **Mail Code Inbox** creates email addresses on `mail.bmssmart.uz`, receives verification emails and exposes a server-side API for BMS ERP. See [mail installation and integration](MAIL_INTEGRATION_RU.md).
+
+## Xprinter Label
 
 The printer is selected by its stable USB ID:
 
@@ -20,10 +22,9 @@ The printer is selected by its stable USB ID:
    https://github.com/optomtr/xprinter-homeassistant-addon
    ```
 
-4. Find and install **Xprinter Label**.
-5. Start the app and enable **Start on boot**.
-6. Open `http://HOME_ASSISTANT_IP:8099/health` and verify that
-   `printer_connected` is `true`.
+4. Install **Xprinter Label** and/or **Mail Code Inbox** from the same repository.
+5. For Mail Code Inbox, set its admin password and ERP API key in the app configuration, then enable automatic updates in its app details. See [mail setup](MAIL_INTEGRATION_RU.md).
+6. For Xprinter Label, start the app and open `http://HOME_ASSISTANT_IP:8099/health` to verify `printer_connected` is `true`.
 
 This is a Home Assistant app/add-on repository, not a HACS integration.
 

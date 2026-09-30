@@ -1,0 +1,97 @@
+import assert from "node:assert/strict";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import test from "node:test";
+import nodemailer from "nodemailer";
+import { startApp } from "../app.js";
+import { extractCode } from "../mail.js";
+import mailClient from "../../integration/bms-erp-client.cjs";
+
+test("extracts a code near verification wording", () => {
+  assert.equal(extractCode("Дата 2026. Ваш код подтверждения: 482913"), "482913");
+  assert.equal(extractCode("No numeric token here"), null);
+});
+
+test("creates an address and receives a code through SMTP", async () => {
+  const folder = mkdtempSync(join(tmpdir(), "mail-code-inbox-"));
+  const app = await startApp({
+    dbPath: join(folder, "inbox.sqlite"),
+    mailDomain: "mail.bmssmart.uz",
+    adminPassword: "local-test-password-123",
+    apiKey: "local-erp-api-key-at-least-24-chars",
+    httpPort: 0,
+    smtpPort: 0,
+  });
+  const base = `http://127.0.0.1:${app.httpAddress.port}`;
+  const origin = base;
+  let cookie = "";
+  const api = async (path, { method = "GET", body } = {}) => {
+    const response = await fetch(`${base}${path}`, {
+      method,
+      headers: { Origin: origin, ...(cookie ? { Cookie: cookie } : {}), ...(body ? { "Content-Type": "application/json" } : {}) },
+      ...(body ? { body: JSON.stringify(body) } : {}),
+    });
+    return { status: response.status, data: await response.json(), response };
+  };
+  const smtp = nodemailer.createTransport({ host: "127.0.0.1", port: app.smtpAddress.port, secure: false, ignoreTLS: true });
+  try {
+    assert.equal((await api("/api/addresses")).status, 401);
+    assert.equal((await api("/api/erp/addresses")).status, 401);
+    const blocked = await fetch(`${base}/api/login`, { method: "POST", headers: { Origin: "http://evil.invalid", "Content-Type": "application/json" }, body: JSON.stringify({ password: "local-test-password-123" }) });
+    assert.equal(blocked.status, 403);
+    assert.equal((await api("/api/login", { method: "POST", body: { password: "wrong" } })).status, 401);
+    const login = await api("/api/login", { method: "POST", body: { password: "local-test-password-123" } });
+    assert.equal(login.status, 200);
+    cookie = login.response.headers.get("set-cookie").split(";", 1)[0];
+    const created = await api("/api/addresses", { method: "POST", body: { localPart: "alice", label: "Алиса" } });
+    assert.equal(created.status, 201);
+    assert.equal(created.data.address, "alice@mail.bmssmart.uz");
+    assert.equal((await api("/api/addresses", { method: "POST", body: { localPart: "alice" } })).status, 409);
+
+    await smtp.sendMail({
+      from: "verify@example.net",
+      to: "alice+smartlab@mail.bmssmart.uz",
+      subject: "Подтверждение регистрации",
+      text: "Ваш код подтверждения: 482913",
+    });
+    const inbox = await api("/api/messages");
+    assert.equal(inbox.status, 200);
+    assert.equal(inbox.data.messages.length, 1);
+    assert.equal(inbox.data.messages[0].code, "482913");
+    assert.equal(inbox.data.messages[0].recipient, "alice+smartlab@mail.bmssmart.uz");
+    const detail = await api(`/api/messages/${inbox.data.messages[0].id}`);
+    assert.match(detail.data.message.body, /482913/u);
+
+    const erpRequest = async (path, { method = "GET", body, key = "local-erp-api-key-at-least-24-chars" } = {}) => {
+      const response = await fetch(`${base}${path}`, {
+        method,
+        headers: { "X-API-Key": key, ...(body ? { "Content-Type": "application/json" } : {}) },
+        ...(body ? { body: JSON.stringify(body) } : {}),
+      });
+      return { status: response.status, data: await response.json() };
+    };
+    const createdByErp = await erpRequest("/api/erp/addresses", { method: "POST", body: { localPart: "smartlab", label: "SmartLab" } });
+    assert.equal(createdByErp.status, 201);
+    assert.equal(createdByErp.data.address, "smartlab@mail.bmssmart.uz");
+    assert.equal((await erpRequest("/api/erp/addresses", { method: "POST", body: { localPart: "smartlab" } })).data.created, false);
+    assert.equal((await erpRequest("/api/erp/addresses")).data.addresses.length, 2);
+    const code = await erpRequest(`/api/erp/codes/latest?address=alice%40mail.bmssmart.uz&since=${Date.now() - 60_000}`);
+    assert.equal(code.data.message.code, "482913");
+    const aliasCode = await erpRequest("/api/erp/codes/latest?address=alice%2Bsmartlab%40mail.bmssmart.uz");
+    assert.equal(aliasCode.data.message.code, "482913");
+    assert.equal((await erpRequest("/api/erp/codes/latest?address=alice%2Bother%40mail.bmssmart.uz")).data.message, null);
+    assert.equal((await erpRequest("/api/erp/codes/latest?address=alice%40mail.bmssmart.uz", { key: "wrong" })).status, 401);
+    const client = mailClient.createMailInboxClient({ baseUrl: base, apiKey: "local-erp-api-key-at-least-24-chars" });
+    assert.equal((await client.createAddress("smartlab")).created, false);
+    assert.equal((await client.latestCode("alice@mail.bmssmart.uz")).message.code, "482913");
+
+    const disabled = await api(`/api/addresses/${created.data.id}`, { method: "PATCH", body: { enabled: false } });
+    assert.equal(disabled.status, 200);
+    await assert.rejects(smtp.sendMail({ from: "verify@example.net", to: "alice@mail.bmssmart.uz", text: "Your code is 123456" }), /550/u);
+  } finally {
+    smtp.close();
+    await app.close();
+    rmSync(folder, { recursive: true, force: true });
+  }
+});

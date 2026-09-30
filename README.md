@@ -41,7 +41,10 @@ rest_command:
       {
         "text": {{ text | tojson }},
         "qr": {{ qr | tojson }},
-        "copies": {{ copies | default(1) | int }}
+        "copies": {{ copies | default(1) | int }}{% if speed is defined %},
+        "speed": {{ speed | float }}{% endif %}{% if pause_every is defined %},
+        "pause_every": {{ pause_every | int }}{% endif %}{% if pause_seconds is defined %},
+        "pause_seconds": {{ pause_seconds | float }}{% endif %}
       }
   xprinter_calibrate:
     url: "http://HOME_ASSISTANT_IP:8099/calibrate"
@@ -56,7 +59,10 @@ rest_command:
         "profile": {{ profile | default("small_30x20") | tojson }},
         "copies": {{ copies | default(1) | int }},
         "font_size": {{ font_size | default(22) | int }},
-        "align": {{ align | default("center") | tojson }}
+        "align": {{ align | default("center") | tojson }}{% if speed is defined %},
+        "speed": {{ speed | float }}{% endif %}{% if pause_every is defined %},
+        "pause_every": {{ pause_every | int }}{% endif %}{% if pause_seconds is defined %},
+        "pause_seconds": {{ pause_seconds | float }}{% endif %}
       }
   xprinter_template:
     url: "http://HOME_ASSISTANT_IP:8099/print-template"
@@ -65,7 +71,10 @@ rest_command:
     payload: >-
       {
         "template": {{ template | tojson }},
-        "copies": {{ copies | default(1) | int }}
+        "copies": {{ copies | default(1) | int }}{% if speed is defined %},
+        "speed": {{ speed | float }}{% endif %}{% if pause_every is defined %},
+        "pause_every": {{ pause_every | int }}{% endif %}{% if pause_seconds is defined %},
+        "pause_seconds": {{ pause_seconds | float }}{% endif %}
       }
   xprinter_relay:
     url: "http://HOME_ASSISTANT_IP:8099/print-relay"
@@ -74,7 +83,10 @@ rest_command:
     payload: >-
       {
         "relays": {{ relays | tojson }},
-        "copies": {{ copies | default(1) | int }}
+        "copies": {{ copies | default(1) | int }}{% if speed is defined %},
+        "speed": {{ speed | float }}{% endif %}{% if pause_every is defined %},
+        "pause_every": {{ pause_every | int }}{% endif %}{% if pause_seconds is defined %},
+        "pause_seconds": {{ pause_seconds | float }}{% endif %}
       }
 ```
 
@@ -119,10 +131,29 @@ Open the add-on **Configuration** tab and adjust:
 - `large_image_offset_dots`: vertical offset for large labels.
 - `large_density`: heat density for large labels. Default `15`.
 - `large_speed`: print speed for large labels. Default `2.0`.
+- `pause_every`: insert a cooling pause after this many labels in one job.
+  Default `10`; set to `0` to disable.
+- `pause_seconds`: cooling pause duration. Default `20` seconds.
 
 If large black areas look speckled on paper, keep `large_density` at `15` and
 try lowering `large_speed` to `1.5` or `1.0`. This is a physical thermal-print
 issue, not a preview issue.
+
+Every print endpoint also accepts optional per-job overrides:
+
+```json
+{
+  "copies": 20,
+  "speed": 2.0,
+  "pause_every": 10,
+  "pause_seconds": 20
+}
+```
+
+The printer inserts a 20-second wait after every tenth label, including when
+the labels arrive as separate API requests. Lower `speed` values reduce
+throughput and usually make the print darker; the cooling pause is the primary
+overheat protection. These fields do not affect preview endpoints.
 
 Save and restart the add-on after changing a value. For cumulative drift, tune
 `gap_mm` first in steps of `0.1` mm. Use `image_offset_dots` only when every

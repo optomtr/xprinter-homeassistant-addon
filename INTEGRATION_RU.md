@@ -78,6 +78,9 @@ Content-Type: application/json
 | `text` | string | да | Английский текст, от 1 до 18 символов |
 | `qr` | string | да | Непустое содержимое QR-кода |
 | `copies` | integer | нет | От 1 до 20, по умолчанию 1 |
+| `speed` | number | нет | Скорость от 1 до 6; меньше — медленнее и обычно темнее |
+| `pause_every` | integer | нет | Пауза после указанного количества копий; `0` отключает |
+| `pause_seconds` | number | нет | Длительность паузы от 0 до 120 секунд |
 
 `text` печатается рядом с QR-кодом. В `qr` можно передавать идентификатор,
 URL или другой текст. Для уверенного считывания на этикетке 30x20 мм
@@ -106,7 +109,10 @@ curl -X POST http://homeassistant.local:8012/print \
   -d '{
     "text": "ID:ASD-1294",
     "qr": "ASD-1294",
-    "copies": 1
+    "copies": 20,
+    "speed": 2,
+    "pause_every": 10,
+    "pause_seconds": 20
   }'
 ```
 
@@ -279,6 +285,9 @@ curl -X POST http://homeassistant.local:8012/print-file \
 | `content_type` | string | нет | Например `application/pdf` |
 | `profile` | string | нет | Обычно `large_60x100` |
 | `copies` | integer | нет | От 1 до 20 |
+| `speed` | number | нет | Скорость от 1 до 6 |
+| `pause_every` | integer | нет | Пауза после N копий; `0` отключает |
+| `pause_seconds` | number | нет | От 0 до 120 секунд |
 | `fit` | string | нет | `contain`, `cover` или `stretch` |
 | `invert` | boolean | нет | Инвертирует само изображение перед печатью |
 | `full_bleed` | boolean | нет | Убирает внутренний отступ и печатает на всю область |
@@ -591,7 +600,10 @@ rest_command:
       {
         "text": {{ text | tojson }},
         "qr": {{ qr | tojson }},
-        "copies": {{ copies | default(1) | int }}
+        "copies": {{ copies | default(1) | int }}{% if speed is defined %},
+        "speed": {{ speed | float }}{% endif %}{% if pause_every is defined %},
+        "pause_every": {{ pause_every | int }}{% endif %}{% if pause_seconds is defined %},
+        "pause_seconds": {{ pause_seconds | float }}{% endif %}
       }
   xprinter_text:
     url: "http://homeassistant.local:8012/print-text"
@@ -603,7 +615,10 @@ rest_command:
         "profile": {{ profile | default("small_30x20") | tojson }},
         "copies": {{ copies | default(1) | int }},
         "font_size": {{ font_size | default(22) | int }},
-        "align": {{ align | default("center") | tojson }}
+        "align": {{ align | default("center") | tojson }}{% if speed is defined %},
+        "speed": {{ speed | float }}{% endif %}{% if pause_every is defined %},
+        "pause_every": {{ pause_every | int }}{% endif %}{% if pause_seconds is defined %},
+        "pause_seconds": {{ pause_seconds | float }}{% endif %}
       }
   xprinter_template:
     url: "http://homeassistant.local:8012/print-template"
@@ -612,7 +627,10 @@ rest_command:
     payload: >-
       {
         "template": {{ template | tojson }},
-        "copies": {{ copies | default(1) | int }}
+        "copies": {{ copies | default(1) | int }}{% if speed is defined %},
+        "speed": {{ speed | float }}{% endif %}{% if pause_every is defined %},
+        "pause_every": {{ pause_every | int }}{% endif %}{% if pause_seconds is defined %},
+        "pause_seconds": {{ pause_seconds | float }}{% endif %}
       }
   xprinter_relay:
     url: "http://homeassistant.local:8012/print-relay"
@@ -621,7 +639,10 @@ rest_command:
     payload: >-
       {
         "relays": {{ relays | tojson }},
-        "copies": {{ copies | default(1) | int }}
+        "copies": {{ copies | default(1) | int }}{% if speed is defined %},
+        "speed": {{ speed | float }}{% endif %}{% if pause_every is defined %},
+        "pause_every": {{ pause_every | int }}{% endif %}{% if pause_seconds is defined %},
+        "pause_seconds": {{ pause_seconds | float }}{% endif %}
       }
 ```
 
@@ -750,6 +771,8 @@ large_margin_mm: 4.0
 large_image_offset_dots: 0
 large_density: 15
 large_speed: 2.0
+pause_every: 10
+pause_seconds: 20.0
 ```
 
 - `label_height_mm` — высота этикетки по направлению подачи.
@@ -761,6 +784,8 @@ large_speed: 2.0
 - `large_image_offset_dots` — постоянный сдвиг большого макета.
 - `large_density` — нагрев большой печати, от 0 до 15.
 - `large_speed` — скорость большой печати. Чем меньше, тем лучше сплошной чёрный.
+- `pause_every` — после скольких этикеток в одном задании сделать паузу.
+- `pause_seconds` — длительность паузы перед продолжением печати.
 - При 203 DPI примерно 8 точек соответствуют 1 мм.
 
 Если чёрная шапка печатается точками или с белыми пробелами, это физическая
@@ -786,8 +811,24 @@ large_density: 15
 large_speed: 1.0
 ```
 
-Эти значения обслуживает администратор принтера. Интегратор не должен
-передавать их в запросе `/print`.
+Параметры `speed`, `pause_every` и `pause_seconds` можно переопределить в любом
+запросе печати: `/print`, `/print-text`, `/print-file`, `/print-template` и
+`/print-relay`. Если параметры не переданы, используются настройки add-on.
+
+Пример безопасной серийной печати 20 этикеток:
+
+```json
+{
+  "copies": 20,
+  "speed": 2,
+  "pause_every": 10,
+  "pause_seconds": 20
+}
+```
+
+После каждой десятой этикетки принтер выдержит 20 секунд. Счётчик общий для
+последовательных запросов, поэтому защита работает и при отправке отдельных
+заданий по одной этикетке. После перезапуска add-on счётчик начинается заново.
 
 ## Калибровка
 

@@ -28,6 +28,7 @@ BUILTIN_TEMPLATE_DIR = Path("/templates")
 
 app = Flask(__name__)
 usb_lock = threading.Lock()
+labels_since_pause = 0
 
 
 @dataclass(frozen=True)
@@ -74,6 +75,8 @@ def load_options():
 OPTIONS = load_options()
 API_KEY = str(OPTIONS.get("api_key", ""))
 DEFAULT_PROFILE = str(OPTIONS.get("default_profile", "small_30x20"))
+DEFAULT_PAUSE_EVERY = int(OPTIONS.get("pause_every", 10))
+DEFAULT_PAUSE_SECONDS = float(OPTIONS.get("pause_seconds", 20.0))
 
 
 def build_profiles():
@@ -210,11 +213,13 @@ def make_small_qr_label(text, qr_payload):
     label.paste(make_qr(qr_payload, 144), (7, 8))
 
     font = ImageFont.truetype(FONT_PATH, 14)
-    text_image = Image.new("1", (130, 22), 1)
+    # The legacy small-label bitmap is inverted by the printer. Drawing the ID
+    # as white on black here produces a clean black ID on a white paper strip.
+    text_image = Image.new("1", (130, 22), 0)
     draw = ImageDraw.Draw(text_image)
     box = draw.textbbox((0, 0), text, font=font)
     text_width = box[2] - box[0]
-    draw.text(((130 - text_width) // 2, 2), text, fill=0, font=font)
+    draw.text(((130 - text_width) // 2, 2), text, fill=1, font=font)
     vertical_text = text_image.rotate(90, expand=True)
     label.paste(vertical_text, (158, 15))
 
@@ -779,7 +784,31 @@ def make_relay_label(relays):
     return relay_finalize(image, profile)
 
 
-def image_to_tspl(image, profile, copies):
+def parse_print_controls(profile):
+    body = get_request_data()
+    speed = float(body.get("speed", profile.speed))
+    pause_every = int(body.get("pause_every", DEFAULT_PAUSE_EVERY))
+    pause_seconds = float(body.get("pause_seconds", DEFAULT_PAUSE_SECONDS))
+
+    if not 1 <= speed <= 6:
+        raise ValueError("speed must be between 1 and 6")
+    if not 0 <= pause_every <= 20:
+        raise ValueError("pause_every must be between 0 and 20")
+    if not 0 <= pause_seconds <= 120:
+        raise ValueError("pause_seconds must be between 0 and 120")
+
+    return speed, pause_every, pause_seconds
+
+
+def image_to_tspl(
+    image,
+    profile,
+    copies,
+    speed=None,
+    pause_every=0,
+    pause_seconds=0,
+    pause_offset=0,
+):
     monochrome = image.convert("1")
     bitmap = bytearray()
 
@@ -800,7 +829,7 @@ def image_to_tspl(image, profile, copies):
         f"SIZE {profile.width_mm:g} mm,{profile.height_mm:g} mm\r\n"
         f"GAP {profile.gap_mm:g} mm,0 mm\r\n"
         f"DENSITY {profile.density}\r\n"
-        f"SPEED {profile.speed:g}\r\n"
+        f"SPEED {(profile.speed if speed is None else speed):g}\r\n"
         "DIRECTION 1\r\n"
         "REFERENCE 0,0\r\n"
         "SET TEAR OFF\r\n"
@@ -810,7 +839,45 @@ def image_to_tspl(image, profile, copies):
         f"BITMAP 0,0,{profile.bytes_per_row},{profile.height_dots},0,"
     ).encode("ascii") + bytes(bitmap) + b"\r\nPRINT 1,1\r\n"
 
-    return setup + label * copies
+    payload = bytearray(setup)
+    delay_ms = round(pause_seconds * 1000)
+    for copy_number in range(1, copies + 1):
+        payload.extend(label)
+        if (
+            pause_every > 0
+            and delay_ms > 0
+            and (pause_offset + copy_number) % pause_every == 0
+        ):
+            payload.extend(f"DELAY {delay_ms}\r\n".encode("ascii"))
+
+    return bytes(payload)
+
+
+def send_print_job(
+    image,
+    profile,
+    copies,
+    speed,
+    pause_every,
+    pause_seconds,
+):
+    global labels_since_pause
+
+    with usb_lock:
+        pause_offset = labels_since_pause if pause_every > 0 else 0
+        payload = image_to_tspl(
+            image,
+            profile,
+            copies,
+            speed,
+            pause_every,
+            pause_seconds,
+            pause_offset,
+        )
+        send_usb(payload)
+        labels_since_pause = (
+            (pause_offset + copies) % pause_every if pause_every > 0 else 0
+        )
 
 
 def send_usb(payload):
@@ -1072,6 +1139,15 @@ def index():
     <label>Copies:
       <input name="copies" type="number" value="1" min="1" max="20">
     </label>
+    <label>Speed:
+      <input name="speed" type="number" value="2" min="1" max="6" step="0.5">
+    </label>
+    <label>Pause every:
+      <input name="pause_every" type="number" value="10" min="0" max="20">
+    </label>
+    <label>Pause seconds:
+      <input name="pause_seconds" type="number" value="20" min="0" max="120" step="1">
+    </label>
     <p><button type="submit">Print</button></p>
   </form>
   <form action="/preview-file" method="post" enctype="multipart/form-data">
@@ -1112,6 +1188,15 @@ def index():
     <label>Copies:
       <input name="copies" type="number" value="1" min="1" max="20">
     </label>
+    <label>Speed:
+      <input name="speed" type="number" value="2" min="1" max="6" step="0.5">
+    </label>
+    <label>Pause every:
+      <input name="pause_every" type="number" value="10" min="0" max="20">
+    </label>
+    <label>Pause seconds:
+      <input name="pause_seconds" type="number" value="20" min="0" max="120" step="1">
+    </label>
     <p><input type="file" name="file" required></p>
     <p><button type="submit">Print</button></p>
   </form>
@@ -1147,6 +1232,10 @@ def health():
                 for template_id, template in BUILTIN_TEMPLATES.items()
             },
             "relay_limits": RELAY_LIMITS,
+            "batch_printing": {
+                "pause_every": DEFAULT_PAUSE_EVERY,
+                "pause_seconds": DEFAULT_PAUSE_SECONDS,
+            },
         }
     )
 
@@ -1263,9 +1352,15 @@ def print_label():
     try:
         text, qr_payload, copies = parse_qr_request()
         profile = PROFILES["small_30x20"]
-        payload = image_to_tspl(make_small_qr_label(text, qr_payload), profile, copies)
-        with usb_lock:
-            send_usb(payload)
+        speed, pause_every, pause_seconds = parse_print_controls(profile)
+        send_print_job(
+            make_small_qr_label(text, qr_payload),
+            profile,
+            copies,
+            speed,
+            pause_every,
+            pause_seconds,
+        )
         return jsonify(
             {
                 "ok": True,
@@ -1273,6 +1368,9 @@ def print_label():
                 "text": text,
                 "qr": qr_payload,
                 "copies": copies,
+                "speed": speed,
+                "pause_every": pause_every,
+                "pause_seconds": pause_seconds,
             }
         )
     except (TypeError, ValueError) as error:
@@ -1287,11 +1385,15 @@ def print_text():
         return jsonify({"error": "unauthorized"}), 401
     try:
         text, copies, font_size, align, profile = parse_text_request()
-        payload = image_to_tspl(
-            make_text_label(text, profile, font_size, align), profile, copies
+        speed, pause_every, pause_seconds = parse_print_controls(profile)
+        send_print_job(
+            make_text_label(text, profile, font_size, align),
+            profile,
+            copies,
+            speed,
+            pause_every,
+            pause_seconds,
         )
-        with usb_lock:
-            send_usb(payload)
         return jsonify(
             {
                 "ok": True,
@@ -1300,6 +1402,9 @@ def print_text():
                 "copies": copies,
                 "font_size": font_size,
                 "align": align,
+                "speed": speed,
+                "pause_every": pause_every,
+                "pause_seconds": pause_seconds,
             }
         )
     except (TypeError, ValueError) as error:
@@ -1324,7 +1429,8 @@ def print_file():
             full_bleed,
             threshold,
         ) = parse_file_request()
-        payload = image_to_tspl(
+        speed, pause_every, pause_seconds = parse_print_controls(profile)
+        send_print_job(
             make_file_label(
                 data,
                 filename,
@@ -1337,9 +1443,10 @@ def print_file():
             ),
             profile,
             copies,
+            speed,
+            pause_every,
+            pause_seconds,
         )
-        with usb_lock:
-            send_usb(payload)
         return jsonify(
             {
                 "ok": True,
@@ -1350,6 +1457,9 @@ def print_file():
                 "invert": invert_image,
                 "full_bleed": full_bleed,
                 "threshold": threshold,
+                "speed": speed,
+                "pause_every": pause_every,
+                "pause_seconds": pause_seconds,
             }
         )
     except (TypeError, ValueError, subprocess.CalledProcessError) as error:
@@ -1365,13 +1475,15 @@ def print_template():
     try:
         template_id, template, copies = parse_template_request()
         profile = PROFILES["large_60x100"]
-        payload = image_to_tspl(
+        speed, pause_every, pause_seconds = parse_print_controls(profile)
+        send_print_job(
             make_builtin_template_label(template_id),
             profile,
             copies,
+            speed,
+            pause_every,
+            pause_seconds,
         )
-        with usb_lock:
-            send_usb(payload)
         return jsonify(
             {
                 "ok": True,
@@ -1379,6 +1491,9 @@ def print_template():
                 "template": template_id,
                 "title": template["title"],
                 "copies": copies,
+                "speed": speed,
+                "pause_every": pause_every,
+                "pause_seconds": pause_seconds,
             }
         )
     except (TypeError, ValueError) as error:
@@ -1394,15 +1509,24 @@ def print_relay():
     try:
         relays, copies = parse_relay_request()
         profile = PROFILES["large_60x100"]
-        payload = image_to_tspl(make_relay_label(relays), profile, copies)
-        with usb_lock:
-            send_usb(payload)
+        speed, pause_every, pause_seconds = parse_print_controls(profile)
+        send_print_job(
+            make_relay_label(relays),
+            profile,
+            copies,
+            speed,
+            pause_every,
+            pause_seconds,
+        )
         return jsonify(
             {
                 "ok": True,
                 "profile": profile.name,
                 "relays": relays,
                 "copies": copies,
+                "speed": speed,
+                "pause_every": pause_every,
+                "pause_seconds": pause_seconds,
             }
         )
     except (TypeError, ValueError) as error:

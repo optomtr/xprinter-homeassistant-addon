@@ -38,5 +38,11 @@ configuration:
   large_speed:
     name: Large print speed
     description: Print speed for large labels. Lower values help solid black areas print darker.
+  pause_every:
+    name: Labels before cooling pause
+    description: Pause a batch after this many labels so the printer can cool down. Set to 0 to disable.
+  pause_seconds:
+    name: Cooling pause duration
+    description: Number of seconds to wait before continuing a batch print.
 network:
   8099/tcp: HTTP printing API

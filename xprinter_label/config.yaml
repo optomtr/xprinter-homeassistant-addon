@@ -1,5 +1,5 @@
 name: Xprinter Label
-version: "1.6.0"
+version: "1.7.0"
 slug: xprinter_label
 description: Print 30x20 mm QR labels on an Xprinter XP-365B over USB
 arch:
@@ -27,6 +27,8 @@ options:
   large_image_offset_dots: 0
   large_density: 15
   large_speed: 2.0
+  pause_every: 10
+  pause_seconds: 20.0
 schema:
   api_key: str
   default_profile: "list(small_30x20|large_60x100)"
@@ -41,3 +43,5 @@ schema:
   large_image_offset_dots: "int(-120,120)"
   large_density: "int(0,15)"
   large_speed: "float(1,6)"
+  pause_every: "int(0,20)"
+  pause_seconds: "float(0,120)"

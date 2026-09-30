@@ -8,6 +8,9 @@ configuration:
   api_key:
     name: Ключ API для ERP
     description: Отдельный секретный ключ не короче 24 символов
+  relay_key:
+    name: Ключ почтового ретранслятора
+    description: Заполните при приёме через HTTPS; отдельный секрет не короче 32 символов
   retention_days:
     name: Срок хранения писем
     description: Число дней; 0 отключает автоматическую очистку

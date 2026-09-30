@@ -13,6 +13,26 @@ test("extracts a code near verification wording", () => {
   assert.equal(extractCode("No numeric token here"), null);
 });
 
+test("existing installations start without a relay key", async () => {
+  const folder = mkdtempSync(join(tmpdir(), "mail-code-inbox-"));
+  const app = await startApp({
+    dbPath: join(folder, "inbox.sqlite"),
+    mailDomain: "mail.bmssmart.uz",
+    adminPassword: "local-test-password-123",
+    apiKey: "local-erp-api-key-at-least-24-chars",
+    httpPort: 0,
+    smtpPort: 0,
+  });
+  try {
+    const base = `http://127.0.0.1:${app.httpAddress.port}`;
+    assert.equal((await fetch(`${base}/api/health`)).status, 200);
+    assert.equal((await fetch(`${base}/api/inbound/forward-email`, { method: "POST" })).status, 503);
+  } finally {
+    await app.close();
+    rmSync(folder, { recursive: true, force: true });
+  }
+});
+
 test("creates an address and receives a code through SMTP", async () => {
   const folder = mkdtempSync(join(tmpdir(), "mail-code-inbox-"));
   const app = await startApp({
@@ -20,6 +40,7 @@ test("creates an address and receives a code through SMTP", async () => {
     mailDomain: "mail.bmssmart.uz",
     adminPassword: "local-test-password-123",
     apiKey: "local-erp-api-key-at-least-24-chars",
+    relayKey: "local-relay-secret-at-least-32-characters",
     httpPort: 0,
     smtpPort: 0,
   });
@@ -81,6 +102,21 @@ test("creates an address and receives a code through SMTP", async () => {
     const aliasCode = await erpRequest("/api/erp/codes/latest?address=alice%2Bsmartlab%40mail.bmssmart.uz");
     assert.equal(aliasCode.data.message.code, "482913");
     assert.equal((await erpRequest("/api/erp/codes/latest?address=alice%2Bother%40mail.bmssmart.uz")).data.message, null);
+    const relayPayload = {
+      raw: "From: service@example.net\r\nTo: smartlab@mail.bmssmart.uz\r\nSubject: SmartLab\r\n\r\nYour verification code: 736284",
+      recipients: ["smartlab@mail.bmssmart.uz"],
+      sender: "service@example.net",
+    };
+    const relayRequest = (key) => fetch(`${base}/api/inbound/forward-email`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Relay-Key": key },
+      body: JSON.stringify(relayPayload),
+    });
+    assert.equal((await relayRequest("wrong")).status, 401);
+    const relayed = await relayRequest("local-relay-secret-at-least-32-characters");
+    assert.equal(relayed.status, 200);
+    assert.deepEqual(await relayed.json(), { stored: 1 });
+    assert.equal((await erpRequest("/api/erp/codes/latest?address=smartlab%40mail.bmssmart.uz")).data.message.code, "736284");
     assert.equal((await erpRequest("/api/erp/codes/latest?address=alice%40mail.bmssmart.uz", { key: "wrong" })).status, 401);
     const client = mailClient.createMailInboxClient({ baseUrl: base, apiKey: "local-erp-api-key-at-least-24-chars" });
     assert.equal((await client.createAddress("smartlab")).created, false);

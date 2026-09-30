@@ -1,7 +1,7 @@
 import { SMTPServer } from "smtp-server";
 import PostalMime from "postal-mime";
 
-const MAX_RAW_BYTES = 5 * 1024 * 1024;
+export const MAX_RAW_BYTES = 5 * 1024 * 1024;
 
 function smtpError(message, responseCode) {
   return Object.assign(new Error(message), { responseCode });
@@ -31,12 +31,48 @@ function htmlToText(html) {
     .replace(/[ \t]+/gu, " ");
 }
 
-export function createMailServer({ db, mailDomain, tls }) {
+export function createMailStore({ db, mailDomain }) {
   const findAddress = db.prepare("SELECT id FROM addresses WHERE local_part = ? AND enabled = 1");
   const insertMessage = db.prepare(`
     INSERT INTO messages(address_id, recipient, sender, subject, body, code, received_at)
     VALUES (?, ?, ?, ?, ?, ?, ?)
   `);
+
+  function findRecipient(value) {
+    if (typeof value !== "string") return null;
+    const recipient = value.toLowerCase();
+    const at = recipient.lastIndexOf("@");
+    if (at < 1 || recipient.slice(at + 1) !== mailDomain) return null;
+    const local = recipient.slice(0, at).split("+", 1)[0];
+    const address = findAddress.get(local);
+    return address ? { id: address.id, recipient } : null;
+  }
+
+  async function store(raw, recipients, fallbackSender = "") {
+    const bytes = Buffer.isBuffer(raw) ? raw : Buffer.from(raw, "utf8");
+    if (bytes.length > MAX_RAW_BYTES) throw new Error("Message too large");
+    const email = await PostalMime.parse(bytes);
+    const body = String(email.text || htmlToText(email.html || "")).slice(0, 200_000);
+    const code = extractCode(`${email.subject || ""}\n${body}`);
+    const sender = email.from?.address || fallbackSender || "unknown";
+    const receivedAt = Date.now();
+    return db.transaction(() => {
+      let stored = 0;
+      for (const value of recipients) {
+        const address = findRecipient(value);
+        // An address may be disabled after SMTP RCPT TO or webhook delivery.
+        if (!address) continue;
+        insertMessage.run(address.id, address.recipient, sender, email.subject || "Без темы", body, code, receivedAt);
+        stored += 1;
+      }
+      return stored;
+    })();
+  }
+
+  return { findRecipient, store };
+}
+
+export function createMailServer({ db, mailDomain, tls, mailStore = createMailStore({ db, mailDomain }) }) {
 
   const server = new SMTPServer({
     name: `mx.${mailDomain}`,
@@ -47,11 +83,7 @@ export function createMailServer({ db, mailDomain, tls }) {
     disabledCommands: ["AUTH", ...(tls ? [] : ["STARTTLS"])],
     ...(tls ? { key: tls.key, cert: tls.cert } : {}),
     onRcptTo(address, session, callback) {
-      const recipient = address.address.toLowerCase();
-      const at = recipient.lastIndexOf("@");
-      const domain = recipient.slice(at + 1);
-      const local = recipient.slice(0, at).split("+", 1)[0];
-      if (domain !== mailDomain || !findAddress.get(local)) {
+      if (!mailStore.findRecipient(address.address)) {
         callback(smtpError("Unknown recipient", 550));
         return;
       }
@@ -74,21 +106,11 @@ export function createMailServer({ db, mailDomain, tls }) {
       stream.on("end", async () => {
         if (tooLarge) return callback(smtpError("Message too large", 552));
         try {
-          const email = await PostalMime.parse(Buffer.concat(chunks));
-          const body = String(email.text || htmlToText(email.html || "")).slice(0, 200_000);
-          const code = extractCode(`${email.subject || ""}\n${body}`);
-          const sender = email.from?.address || session.envelope.mailFrom.address || "unknown";
-          const receivedAt = Date.now();
-          const save = db.transaction(() => {
-            for (const recipient of session.envelope.rcptTo) {
-              const value = recipient.address.toLowerCase();
-              const local = value.slice(0, value.lastIndexOf("@")).split("+", 1)[0];
-              const address = findAddress.get(local);
-              // An address could be disabled after RCPT TO but before DATA completes.
-              if (address) insertMessage.run(address.id, value, sender, email.subject || "Без темы", body, code, receivedAt);
-            }
-          });
-          save();
+          await mailStore.store(
+            Buffer.concat(chunks),
+            session.envelope.rcptTo.map((recipient) => recipient.address),
+            session.envelope.mailFrom.address,
+          );
           callback();
         } catch (error) {
           console.error("Could not store incoming email", error);

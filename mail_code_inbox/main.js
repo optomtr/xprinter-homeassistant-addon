@@ -6,6 +6,7 @@ const haOptions = existsSync("/data/options.json") ? JSON.parse(readFileSync("/d
 const mailDomain = String(haOptions?.mail_domain ?? process.env.MAIL_DOMAIN ?? "").trim().toLowerCase();
 const adminPassword = haOptions?.admin_password ?? process.env.ADMIN_PASSWORD;
 const apiKey = haOptions?.api_key ?? process.env.API_KEY;
+const relayKey = haOptions?.relay_key ?? process.env.RELAY_KEY;
 const appOrigin = process.env.APP_ORIGIN;
 if (!mailDomain || !adminPassword || !apiKey) {
   console.error("Configure mail_domain, admin_password and api_key in Home Assistant app options");
@@ -31,6 +32,7 @@ const app = await startApp({
   mailDomain,
   adminPassword,
   apiKey,
+  relayKey,
   appOrigin,
   httpHost: process.env.HTTP_HOST || "0.0.0.0",
   httpPort: Number(process.env.HTTP_PORT || 3000),

@@ -1,5 +1,5 @@
 name: Mail Code Inbox
-version: "0.2.0"
+version: "0.3.0"
 slug: mail_code_inbox
 description: Receive registration emails and verification codes on mail.bmssmart.uz
 arch:
@@ -26,6 +26,7 @@ schema:
   mail_domain: str
   admin_password: password
   api_key: password
+  relay_key: "password?"
   retention_days: "int(0,3650)"
   smtp_tls_cert: "str?"
   smtp_tls_key: "str?"

@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { openDatabase } from "./db.js";
-import { createMailServer } from "./mail.js";
+import { createMailServer, createMailStore, MAX_RAW_BYTES } from "./mail.js";
 
 const here = fileURLToPath(new URL(".", import.meta.url));
 const staticFiles = new Map([
@@ -18,18 +18,18 @@ function json(res, status, value) {
   res.end(JSON.stringify(value));
 }
 
-function readJson(req) {
+function readJson(req, maxBytes = 16_384) {
   return new Promise((resolve, reject) => {
     const chunks = [];
     let size = 0;
+    let tooLarge = false;
     req.on("data", (chunk) => {
       size += chunk.length;
-      if (size > 16_384) {
-        reject(Object.assign(new Error("Request too large"), { status: 413 }));
-        req.destroy();
-      } else chunks.push(chunk);
+      if (size > maxBytes) tooLarge = true;
+      if (!tooLarge) chunks.push(chunk);
     });
     req.on("end", () => {
+      if (tooLarge) return reject(Object.assign(new Error("Request too large"), { status: 413 }));
       try {
         resolve(JSON.parse(Buffer.concat(chunks).toString("utf8")));
       } catch {
@@ -63,7 +63,7 @@ function normalizeLocalPart(value) {
 
 export async function startApp(options) {
   const {
-    dbPath, mailDomain, adminPassword, apiKey, appOrigin,
+    dbPath, mailDomain, adminPassword, apiKey, relayKey, appOrigin,
     httpHost = "127.0.0.1", httpPort = 3000,
     smtpHost = "127.0.0.1", smtpPort = 2525,
     retentionDays = 30, tls,
@@ -71,9 +71,12 @@ export async function startApp(options) {
   if (!/^(?:[a-z0-9-]+\.)+[a-z]{2,}$/u.test(mailDomain)) throw new Error("MAIL_DOMAIN must be a domain name");
   if (typeof adminPassword !== "string" || adminPassword.length < 12) throw new Error("ADMIN_PASSWORD must be at least 12 characters");
   if (typeof apiKey !== "string" || apiKey.length < 24) throw new Error("API_KEY must be at least 24 characters");
+  if (relayKey && (typeof relayKey !== "string" || relayKey.length < 32)) throw new Error("RELAY_KEY must be at least 32 characters");
   const origin = appOrigin ? new URL(appOrigin).origin : null;
   const expectedApiKey = createHash("sha256").update(apiKey).digest();
+  const expectedRelayKey = relayKey ? createHash("sha256").update(relayKey).digest() : null;
   const db = openDatabase(dbPath);
+  const mailStore = createMailStore({ db, mailDomain });
   // A restart revokes all cookies, including when the admin changes the password.
   db.prepare("DELETE FROM sessions").run();
   const passwordSalt = randomBytes(16);
@@ -130,7 +133,8 @@ export async function startApp(options) {
       const url = new URL(req.url || "/", "http://localhost");
       const path = url.pathname;
       const erpRoute = path.startsWith("/api/erp/");
-      if (method !== "GET" && method !== "HEAD" && !erpRoute) {
+      const relayRoute = path === "/api/inbound/forward-email";
+      if (method !== "GET" && method !== "HEAD" && !erpRoute && !relayRoute) {
         const requestOrigin = req.headers.origin;
         let validOrigin = false;
         try {
@@ -141,6 +145,25 @@ export async function startApp(options) {
         if (!validOrigin) return json(res, 403, { error: "Invalid origin" });
       }
       if (method === "GET" && path === "/api/health") return json(res, 200, { ok: true });
+      if (relayRoute) {
+        if (method !== "POST") return json(res, 405, { error: "Method not allowed" });
+        if (!expectedRelayKey) return json(res, 503, { error: "Relay not configured" });
+        const provided = req.headers["x-relay-key"];
+        if (typeof provided !== "string" || !timingSafeEqual(createHash("sha256").update(provided).digest(), expectedRelayKey)) {
+          return json(res, 401, { error: "Invalid relay key" });
+        }
+        if (!req.headers["content-type"]?.startsWith("application/json")) return json(res, 415, { error: "Expected JSON" });
+        const body = await readJson(req, MAX_RAW_BYTES * 2);
+        if (!body || typeof body.raw !== "string" || !Array.isArray(body.recipients) ||
+          body.recipients.length === 0 || body.recipients.length > 10 ||
+          !body.recipients.every((recipient) => typeof recipient === "string" && recipient.length <= 320) ||
+          (body.sender !== undefined && typeof body.sender !== "string")) {
+          return json(res, 400, { error: "Invalid email payload" });
+        }
+        if (Buffer.byteLength(body.raw, "utf8") > MAX_RAW_BYTES) return json(res, 413, { error: "Message too large" });
+        const stored = await mailStore.store(body.raw, body.recipients, body.sender);
+        return json(res, 200, { stored });
+      }
       if (erpRoute) {
         if (!apiAuthenticated(req)) return json(res, 401, { error: "Invalid API key" });
         if (method === "GET" && path === "/api/erp/addresses") {
@@ -251,7 +274,7 @@ export async function startApp(options) {
     }
   });
 
-  const smtp = createMailServer({ db, mailDomain, tls });
+  const smtp = createMailServer({ db, mailDomain, tls, mailStore });
   const listen = (server, port, host) => new Promise((resolve, reject) => {
     server.once("error", reject);
     server.listen(port, host, () => {

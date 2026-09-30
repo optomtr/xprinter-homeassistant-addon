@@ -1,5 +1,7 @@
 # Почта для кодов — Home Assistant и BMS ERP
 
+**Короткая инструкция для установки и проверки:** [открыть PDF](output/pdf/Mail_Code_Inbox_guide_RU.pdf).
+
 **Mail Code Inbox** — второе приложение в этом репозитории, рядом с Xprinter Label. Оно принимает письма на созданные адреса `*@mail.bmssmart.uz`, выделяет коды и хранит письма в SQLite. Проект BMS ERP не изменён; для подключения его бэкенда подготовлен HTTP API и [адаптер](integration/bms-erp-client.cjs).
 
 ## Установка и обновления

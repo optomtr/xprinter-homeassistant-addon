@@ -3,7 +3,7 @@
 This repository contains two Home Assistant apps:
 
 - **Xprinter Label** prints labels on the USB Xprinter XP-365B. See [printer integration](INTEGRATION_RU.md).
-- **Mail Code Inbox** creates email addresses on `mail.bmssmart.uz`, receives verification emails and exposes a server-side API for BMS ERP. See [mail installation and integration](MAIL_INTEGRATION_RU.md).
+- **Mail Code Inbox** creates email addresses on `mail.bmssmart.uz`, receives verification emails and exposes a server-side API for BMS ERP. Start with the [Russian PDF guide](output/pdf/Mail_Code_Inbox_guide_RU.pdf), then see [mail integration details](MAIL_INTEGRATION_RU.md).
 
 ## Xprinter Label
 

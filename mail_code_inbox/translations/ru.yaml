@@ -1,7 +1,7 @@
 configuration:
   mail_domain:
     name: Почтовый домен
-    description: Домен создаваемых адресов, например mail.bmssmart.uz
+    description: Домен создаваемых адресов, например bmssmart.uz
   admin_password:
     name: Пароль веб-интерфейса
     description: Не менее 12 символов

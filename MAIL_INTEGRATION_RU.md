@@ -2,7 +2,7 @@
 
 **Короткая инструкция для установки и проверки:** [открыть PDF](output/pdf/Mail_Code_Inbox_guide_RU.pdf).
 
-**Mail Code Inbox** — второе приложение в этом репозитории, рядом с Xprinter Label. Оно принимает письма на созданные адреса `*@mail.bmssmart.uz`, выделяет коды и хранит письма в SQLite. Проект BMS ERP не изменён; для подключения его бэкенда подготовлен HTTP API и [адаптер](integration/bms-erp-client.cjs).
+**Mail Code Inbox** — второе приложение в этом репозитории, рядом с Xprinter Label. Оно принимает письма на созданные адреса `*@bmssmart.uz`, выделяет коды и хранит письма в SQLite. Проект BMS ERP не изменён; для подключения его бэкенда подготовлен HTTP API и [адаптер](integration/bms-erp-client.cjs).
 
 ## Установка и обновления
 
@@ -14,21 +14,21 @@
 
 ## Доставка без публичного IP и порта 25
 
-Для обычных адресов вида `alice@mail.bmssmart.uz` можно использовать бесплатный catch-all [Forward Email](https://forwardemail.net/en/faq), HTTPS Worker и Cloudflare Tunnel. Письма хранятся в Home Assistant; внешний приёмник только передаёт их туда. Статичный или публичный IP у Home Assistant и проброс входящего порта 25 не нужны.
+Для обычных адресов вида `alice@bmssmart.uz` можно использовать бесплатный catch-all [Forward Email](https://forwardemail.net/en/faq), HTTPS Worker и Cloudflare Tunnel. Письма хранятся в Home Assistant; внешний приёмник только передаёт их туда. Статичный или публичный IP у Home Assistant и проброс входящего порта 25 не нужны. **Переключение MX основного домена направляет всю почту `@bmssmart.uz` через Forward Email.** Приложение сохраняет письма только для созданных и включённых адресов; для остальных адресов эту схему не используйте без отдельной маршрутизации.
 
 1. В опциях Mail Code Inbox укажите отдельный `relay_key` длиной не менее 32 символов. Сохраните тот же ключ как секрет `RELAY_KEY` Cloudflare Worker из [`mail_code_inbox/relay`](mail_code_inbox/relay). Не помещайте его в DNS или GitHub.
 2. В Cloudflare Tunnel опубликуйте отдельный HTTPS hostname `inbox-hook.bmssmart.uz`. Направьте **только путь** `/api/inbound/forward-email` на `http://<IP-Home-Assistant>:3010`; для остальных путей установите ответ 404. Этот маршрут принимает запросы от Worker, а веб-интерфейс открывается через Home Assistant.
 3. В каталоге `mail_code_inbox/relay` разверните Worker: `npx wrangler secret put RELAY_KEY`, затем `npx wrangler deploy`. Перед развёртыванием при необходимости замените `INBOX_URL` в `wrangler.toml` на ваш HTTPS hostname туннеля. Worker проверяет IP отправителя по опубликованному списку серверов Forward Email и передаёт письмо в приложение с отдельным секретом.
-4. В DNS Cloudflare для имени **`mail`** создайте два MX с приоритетом `0`: `mx1.forwardemail.net` и `mx2.forwardemail.net`. На том же имени добавьте TXT `forward-email=https://<адрес-вашего-Worker>.workers.dev/`. Это бесплатная catch-all пересылка на Worker; её URL виден в публичном DNS, но ключ `RELAY_KEY` там отсутствует. MX основного `bmssmart.uz` не меняйте.
+4. В DNS Cloudflare для имени **`@`** замените прежний MX на два MX с приоритетом `0`: `mx1.forwardemail.net` и `mx2.forwardemail.net`. На `@` добавьте TXT `forward-email=https://<адрес-вашего-Worker>.workers.dev/`. Это бесплатная catch-all пересылка на Worker; её URL виден в публичном DNS, но ключ `RELAY_KEY` там отсутствует. Существующие веб-записи `A`/`CNAME` домена менять не требуется.
 5. Создайте адрес в Mail Code Inbox и отправьте на него пробное письмо. Приложение сохраняет только письма для созданных и включённых адресов. Письмо больше 5 МиБ приложение не принимает.
 
 Если Home Assistant временно недоступен, Worker возвращает ошибку, а Forward Email повторяет доставку. Это не является гарантией доставки: проверьте первое письмо до использования адресов для важных аккаунтов.
 
 ## Альтернатива: прямой SMTP на Home Assistant
 
-В DNS Cloudflare создайте DNS-only A-запись `mx.mail.bmssmart.uz` на публичный IPv4, а MX-запись для `mail.bmssmart.uz` с приоритетом 10 — на `mx.mail.bmssmart.uz`. На роутере пробросьте входящий TCP 25 на IP Home Assistant. Провайдер должен разрешать входящий порт 25 и выдавать публичный IP. MX основного `bmssmart.uz` менять не нужно.
+В DNS Cloudflare создайте DNS-only A-запись `mx.bmssmart.uz` на публичный IPv4, а MX-запись для `bmssmart.uz` с приоритетом 10 — на `mx.bmssmart.uz`. На роутере пробросьте входящий TCP 25 на IP Home Assistant. Провайдер должен разрешать входящий порт 25 и выдавать публичный IP. Это альтернативный способ приёма вместо Forward Email; одновременно обе схемы MX не включайте.
 
-Создайте адрес в веб-интерфейсе и отправьте на него тестовое письмо с внешнего сервиса. `alice+smartlab@mail.bmssmart.uz` доставляется в ящик `alice`.
+Создайте адрес в веб-интерфейсе и отправьте на него тестовое письмо с внешнего сервиса. `alice+smartlab@bmssmart.uz` доставляется в ящик `alice`.
 
 ## API для ERP
 
@@ -38,7 +38,7 @@
 | --- | --- |
 | Список адресов | `GET /api/erp/addresses` |
 | Создать адрес | `POST /api/erp/addresses` с JSON `{"localPart":"alice","label":"Алиса"}` |
-| Последний код | `GET /api/erp/codes/latest?address=alice%40mail.bmssmart.uz&since=TIMESTAMP_MS` |
+| Последний код | `GET /api/erp/codes/latest?address=alice%40bmssmart.uz&since=TIMESTAMP_MS` |
 
 `since` — Unix время в миллисекундах. Без него сервис ищет за последние 10 минут. Ответ содержит `message` с полем `code` или `message: null`. Повторное создание адреса возвращает существующий адрес (`created: false`). Ошибка ключа — HTTP 401.
 

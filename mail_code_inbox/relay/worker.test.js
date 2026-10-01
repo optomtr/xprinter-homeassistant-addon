@@ -16,7 +16,7 @@ test("only Forward Email MX servers can relay to Home Assistant", async () => {
     return new Response("OK");
   };
   const env = { INBOX_URL: "https://inbox-hook.example.net/api/inbound/forward-email", RELAY_KEY: "private-relay-secret" };
-  const payload = { raw: "Subject: Code\r\n\r\nCode 123456", recipients: ["alice@mail.bmssmart.uz"], session: { sender: "service@example.net" } };
+  const payload = { raw: "Subject: Code\r\n\r\nCode 123456", recipients: ["alice@bmssmart.uz"], session: { sender: "service@example.net" } };
   const request = (ip) => new Request("https://relay.example.net/", {
     method: "POST",
     headers: { "CF-Connecting-IP": ip, "Content-Type": "application/json" },

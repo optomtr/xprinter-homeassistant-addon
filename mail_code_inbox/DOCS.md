@@ -1,10 +1,10 @@
 # Mail Code Inbox
 
-Это приложение принимает письма на адреса `*@mail.bmssmart.uz` и показывает коды в веб-интерфейсе. База SQLite хранится в `/data/inbox.sqlite` и сохраняется при обновлениях Home Assistant.
+Это приложение принимает письма на адреса `*@bmssmart.uz` и показывает коды в веб-интерфейсе. База SQLite хранится в `/data/inbox.sqlite` и сохраняется при обновлениях Home Assistant.
 
 ## Настройка
 
-- `mail_domain`: домен адресов, по умолчанию `mail.bmssmart.uz`.
+- `mail_domain`: домен адресов, по умолчанию `bmssmart.uz`.
 - `admin_password`: пароль входа в веб-интерфейс, минимум 12 символов.
 - `api_key`: отдельный ключ ERP API, минимум 24 символа. Получите случайный ключ командой `openssl rand -hex 32`.
 - `retention_days`: сколько дней хранить письма, 0 отключает автоочистку.
@@ -15,11 +15,11 @@
 
 ## Приём без публичного IP
 
-Используйте [инструкцию для Forward Email, Cloudflare Worker и Tunnel](../MAIL_INTEGRATION_RU.md#доставка-без-публичного-ip-и-порта-25). В этом режиме обычные адреса `alice@mail.bmssmart.uz` создаются в приложении, а внешние почтовые серверы отправляют письма на MX Forward Email. Worker пересылает их в Home Assistant по HTTPS с `relay_key`. Порт 25 на домашнем роутере не требуется.
+Используйте [инструкцию для Forward Email, Cloudflare Worker и Tunnel](../MAIL_INTEGRATION_RU.md#доставка-без-публичного-ip-и-порта-25). В этом режиме обычные адреса `alice@bmssmart.uz` создаются в приложении, а внешние почтовые серверы отправляют письма на MX Forward Email. Worker пересылает их в Home Assistant по HTTPS с `relay_key`. Порт 25 на домашнем роутере не требуется. MX основного домена при этом заменяется; все адреса `@bmssmart.uz` маршрутизируются через Forward Email, а приложение сохраняет письма только для созданных ящиков.
 
 ## DNS для прямого SMTP
 
-Создайте DNS-only A-запись `mx.mail.bmssmart.uz` на публичный IPv4 Home Assistant, затем MX-запись для `mail.bmssmart.uz` с приоритетом 10 на `mx.mail.bmssmart.uz`. На роутере перенаправьте входящий TCP 25 на IP Home Assistant. MX основного домена `bmssmart.uz` менять не нужно.
+Создайте DNS-only A-запись `mx.bmssmart.uz` на публичный IPv4 Home Assistant, затем MX-запись для `bmssmart.uz` с приоритетом 10 на `mx.bmssmart.uz`. На роутере перенаправьте входящий TCP 25 на IP Home Assistant. Это альтернатива Forward Email, а не дополнительные MX-записи к нему.
 
 ## BMS ERP API
 
@@ -27,6 +27,6 @@ ERP-бэкенд обращается к `http://homeassistant.local:3010`, пе
 
 - `GET /api/erp/addresses` — список адресов.
 - `POST /api/erp/addresses` с JSON `{"localPart":"alice","label":"Алиса"}` — создать адрес, повторный вызов идемпотентен.
-- `GET /api/erp/codes/latest?address=alice%40mail.bmssmart.uz&since=TIMESTAMP_MS` — последний код после указанного времени, либо `message: null`. Без `since` ищет за 10 минут.
+- `GET /api/erp/codes/latest?address=alice%40bmssmart.uz&since=TIMESTAMP_MS` — последний код после указанного времени, либо `message: null`. Без `since` ищет за 10 минут.
 
 Веб-интерфейс открывается кнопкой в Home Assistant, в том числе с телефона через существующий адрес Home Assistant. Создайте первый адрес и отправьте на него письмо из внешнего почтового сервиса для проверки доставки.

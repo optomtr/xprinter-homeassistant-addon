@@ -5,12 +5,32 @@ import { join } from "node:path";
 import test from "node:test";
 import nodemailer from "nodemailer";
 import { startApp } from "../app.js";
-import { extractCode } from "../mail.js";
+import { extractCode, repairStoredCodes } from "../mail.js";
+import { openDatabase } from "../db.js";
 import mailClient from "../../integration/bms-erp-client.cjs";
 
 test("extracts a code near verification wording", () => {
   assert.equal(extractCode("Дата 2026. Ваш код подтверждения: 482913"), "482913");
+  const yandexBody = `.mail-address a,\n.mail-address a[href] {\n color: #000000 !important;\n}\nTo confirm this email address, please enter this code on Yandex ID:\n\n 638421`;
+  assert.equal(extractCode(`Confirm your email address\n${yandexBody}`), "638421");
+  assert.equal(extractCode(".mail-address a { color: #000000 !important; }"), null);
   assert.equal(extractCode("No numeric token here"), null);
+});
+
+test("repairs a previously stored CSS color mistaken for a code", () => {
+  const folder = mkdtempSync(join(tmpdir(), "mail-code-repair-"));
+  const db = openDatabase(join(folder, "inbox.sqlite"));
+  try {
+    const address = db.prepare("INSERT INTO addresses(local_part, label, created_at) VALUES (?, ?, ?)").run("alice", "", Date.now());
+    db.prepare("INSERT INTO messages(address_id, recipient, sender, subject, body, code, received_at) VALUES (?, ?, ?, ?, ?, ?, ?)")
+      .run(address.lastInsertRowid, "alice@bmssmart.uz", "noreply@id.yandex.ru", "Confirm your email address",
+        ".mail-address a { color: #000000; }\nPlease enter this code on Yandex ID:\n\n 638421", "000000", Date.now());
+    repairStoredCodes(db);
+    assert.equal(db.prepare("SELECT code FROM messages").get().code, "638421");
+  } finally {
+    db.close();
+    rmSync(folder, { recursive: true, force: true });
+  }
 });
 
 test("existing installations start without a relay key", async () => {

@@ -8,12 +8,26 @@ function smtpError(message, responseCode) {
 }
 
 export function extractCode(text) {
-  const contextual = /(?:код|code|otp|verification|verify|подтверждени[ея]|пароль)[^\d\n]{0,50}(\d{4,8})/iu.exec(text);
+  // Email templates often put the code on another line and include CSS colors
+  // such as #000000 before the actual verification code.
+  const content = text.replace(/#[\da-f]{6,8}\b/giu, " ").replace(/\s+/gu, " ");
+  const contextual = /(?:код|code|otp|verification|verify|подтверждени[ея]|пароль)[^\d]{0,80}(\d{4,8})/iu.exec(content);
   if (contextual) return contextual[1];
-  const longer = /(?:^|\D)(\d{5,8})(?!\d)/u.exec(text);
+  const longer = /(?:^|\D)(\d{5,8})(?!\d)/u.exec(content);
   if (longer) return longer[1];
-  const short = /(?:^|\D)(\d{4})(?!\d)/u.exec(text);
+  const short = /(?:^|\D)(\d{4})(?!\d)/u.exec(content);
   return short?.[1] ?? null;
+}
+
+export function repairStoredCodes(db) {
+  const suspicious = db.prepare("SELECT id, subject, body, code FROM messages WHERE code = '000000'");
+  const update = db.prepare("UPDATE messages SET code = ? WHERE id = ?");
+  db.transaction(() => {
+    for (const message of suspicious.all()) {
+      const code = extractCode(`${message.subject}\n${message.body}`);
+      if (code !== message.code) update.run(code, message.id);
+    }
+  })();
 }
 
 function htmlToText(html) {

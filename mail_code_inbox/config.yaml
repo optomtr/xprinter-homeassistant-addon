@@ -1,5 +1,5 @@
 name: Mail Code Inbox
-version: "0.5.0"
+version: "0.5.1"
 slug: mail_code_inbox
 description: Receive registration emails and verification codes on bmssmart.uz
 arch:

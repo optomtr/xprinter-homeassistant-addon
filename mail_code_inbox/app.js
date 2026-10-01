@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { openDatabase } from "./db.js";
-import { createMailServer, createMailStore, MAX_RAW_BYTES } from "./mail.js";
+import { createMailServer, createMailStore, MAX_RAW_BYTES, repairStoredCodes } from "./mail.js";
 
 const here = fileURLToPath(new URL(".", import.meta.url));
 const staticFiles = new Map([
@@ -77,6 +77,7 @@ export async function startApp(options) {
   const expectedApiKey = createHash("sha256").update(apiKey).digest();
   const expectedRelayKey = relayKey ? createHash("sha256").update(relayKey).digest() : null;
   const db = openDatabase(dbPath);
+  repairStoredCodes(db);
   const mailStore = createMailStore({ db, mailDomain });
   // A restart revokes all cookies, including when the admin changes the password.
   db.prepare("DELETE FROM sessions").run();

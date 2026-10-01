@@ -1,5 +1,5 @@
 name: Mail Code Inbox
-version: "0.3.0"
+version: "0.4.0"
 slug: mail_code_inbox
 description: Receive registration emails and verification codes on mail.bmssmart.uz
 arch:
@@ -10,7 +10,10 @@ boot: auto
 init: false
 map:
   - ssl
-webui: http://[HOST]:[PORT:3000]
+ingress: true
+ingress_port: 8099
+panel_icon: mdi:email-lock
+panel_title: Почта для кодов
 ports:
   3000/tcp: 3010
   2525/tcp: 25

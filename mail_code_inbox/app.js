@@ -65,6 +65,7 @@ export async function startApp(options) {
   const {
     dbPath, mailDomain, adminPassword, apiKey, relayKey, appOrigin,
     httpHost = "127.0.0.1", httpPort = 3000,
+    ingressHost = "127.0.0.1", ingressPort = null, ingressProxy = "172.30.32.2",
     smtpHost = "127.0.0.1", smtpPort = 2525,
     retentionDays = 30, tls,
   } = options;
@@ -102,7 +103,8 @@ export async function startApp(options) {
     FROM messages WHERE address_id = ? AND code IS NOT NULL AND received_at >= ?
     AND (? IS NULL OR recipient = ?) ORDER BY received_at DESC, id DESC LIMIT 1`);
 
-  function authenticated(req) {
+  function authenticated(req, viaIngress) {
+    if (viaIngress) return true;
     const token = tokenFromCookie(req.headers.cookie);
     return token && !!getSession.get(tokenHash(token), Date.now());
   }
@@ -123,9 +125,12 @@ export async function startApp(options) {
     return { base, exact: local.includes("+") ? address : null };
   }
 
-  const http = createServer(async (req, res) => {
+  const handleRequest = async (req, res, viaIngress = false) => {
+    if (viaIngress && req.socket.remoteAddress !== ingressProxy) {
+      return json(res, 403, { error: "Ingress proxy required" });
+    }
     res.setHeader("X-Content-Type-Options", "nosniff");
-    res.setHeader("X-Frame-Options", "DENY");
+    res.setHeader("X-Frame-Options", viaIngress ? "SAMEORIGIN" : "DENY");
     res.setHeader("Referrer-Policy", "no-referrer");
     res.setHeader("Content-Security-Policy", "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' data:; form-action 'self'; base-uri 'none'");
     try {
@@ -134,7 +139,7 @@ export async function startApp(options) {
       const path = url.pathname;
       const erpRoute = path.startsWith("/api/erp/");
       const relayRoute = path === "/api/inbound/forward-email";
-      if (method !== "GET" && method !== "HEAD" && !erpRoute && !relayRoute) {
+      if (!viaIngress && method !== "GET" && method !== "HEAD" && !erpRoute && !relayRoute) {
         const requestOrigin = req.headers.origin;
         let validOrigin = false;
         try {
@@ -209,15 +214,16 @@ export async function startApp(options) {
         res.setHeader("Set-Cookie", `mail_code_session=${token}; Path=/; HttpOnly; SameSite=Strict; Max-Age=604800${req.headers.origin?.startsWith("https://") ? "; Secure" : ""}`);
         return json(res, 200, { ok: true });
       }
-      if (method === "GET" && path === "/api/session") return json(res, 200, { authenticated: !!authenticated(req), domain: mailDomain });
+      if (method === "GET" && path === "/api/session") return json(res, 200, { authenticated: !!authenticated(req, viaIngress), domain: mailDomain, ingress: viaIngress });
       if (!path.startsWith("/api/")) {
         const file = method === "GET" ? staticFiles.get(path) : null;
         if (!file) return json(res, 404, { error: "Not found" });
         res.writeHead(200, { "Content-Type": file.type, "Cache-Control": "no-store" });
         return res.end(file.data);
       }
-      if (!authenticated(req)) return json(res, 401, { error: "Sign in required" });
+      if (!authenticated(req, viaIngress)) return json(res, 401, { error: "Sign in required" });
       if (method === "POST" && path === "/api/logout") {
+        if (viaIngress) return json(res, 200, { ok: true });
         const token = tokenFromCookie(req.headers.cookie);
         if (token) deleteSession.run(tokenHash(token));
         res.setHeader("Set-Cookie", `mail_code_session=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0${req.headers.origin?.startsWith("https://") ? "; Secure" : ""}`);
@@ -272,7 +278,9 @@ export async function startApp(options) {
       console.error("HTTP request failed", error);
       return json(res, 500, { error: "Internal error" });
     }
-  });
+  };
+  const http = createServer((req, res) => handleRequest(req, res));
+  const ingress = ingressPort === null ? null : createServer((req, res) => handleRequest(req, res, true));
 
   const smtp = createMailServer({ db, mailDomain, tls, mailStore });
   const listen = (server, port, host) => new Promise((resolve, reject) => {
@@ -283,12 +291,15 @@ export async function startApp(options) {
     });
   });
   let httpAddress;
+  let ingressAddress;
   let smtpAddress;
   try {
     httpAddress = await listen(http, httpPort, httpHost);
+    if (ingress) ingressAddress = await listen(ingress, ingressPort, ingressHost);
     smtpAddress = await listen(smtp, smtpPort, smtpHost);
   } catch (error) {
     http.close();
+    ingress?.close();
     smtp.close();
     db.close();
     throw error;
@@ -300,11 +311,13 @@ export async function startApp(options) {
   cleanup.unref();
   return {
     httpAddress,
+    ingressAddress,
     smtpAddress,
     close: async () => {
       clearInterval(cleanup);
       await Promise.all([
         new Promise((resolve) => http.close(resolve)),
+        ...(ingress ? [new Promise((resolve) => ingress.close(resolve))] : []),
         new Promise((resolve) => smtp.close(resolve)),
       ]);
       db.close();

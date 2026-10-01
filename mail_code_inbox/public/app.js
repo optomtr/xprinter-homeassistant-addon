@@ -2,7 +2,7 @@ const $ = (id) => document.getElementById(id);
 const state = { domain: "", addresses: [], selectedAddressId: null, selectedMessageId: null, loading: false };
 
 async function request(path, options = {}) {
-  const response = await fetch(path, {
+  const response = await fetch(new URL(path.replace(/^\//u, ""), document.baseURI), {
     credentials: "same-origin",
     headers: options.body ? { "Content-Type": "application/json" } : {},
     ...options,
@@ -162,6 +162,7 @@ async function copy(value) {
 
 async function initialize() {
   const session = await request("/api/session");
+  $("logoutButton").hidden = !!session.ingress;
   if (!session.authenticated) {
     $("loginView").hidden = false;
     $("appView").hidden = true;

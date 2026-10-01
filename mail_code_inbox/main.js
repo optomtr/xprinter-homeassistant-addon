@@ -36,6 +36,8 @@ const app = await startApp({
   appOrigin,
   httpHost: process.env.HTTP_HOST || "0.0.0.0",
   httpPort: Number(process.env.HTTP_PORT || 3000),
+  ingressHost: process.env.INGRESS_HOST || "0.0.0.0",
+  ingressPort: Number(process.env.INGRESS_PORT || 8099),
   smtpHost: process.env.SMTP_HOST || "0.0.0.0",
   smtpPort: Number(process.env.SMTP_PORT || 2525),
   retentionDays: Number(haOptions?.retention_days ?? process.env.RETENTION_DAYS ?? 30),
@@ -43,6 +45,7 @@ const app = await startApp({
 });
 
 console.log(`Web UI on ${app.httpAddress.address}:${app.httpAddress.port}`);
+console.log(`Home Assistant ingress on ${app.ingressAddress.address}:${app.ingressAddress.port}`);
 console.log(`SMTP for ${mailDomain} on ${app.smtpAddress.address}:${app.smtpAddress.port}`);
 
 for (const signal of ["SIGINT", "SIGTERM"]) {

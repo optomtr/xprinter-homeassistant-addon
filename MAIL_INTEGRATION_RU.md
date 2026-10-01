@@ -10,14 +10,14 @@
 
 Приложение запускается при старте Home Assistant. Чтобы новые версии устанавливались автоматически, включите **Автоматическое обновление** в карточке Mail Code Inbox. Новая версия определяется по полю `version` в `mail_code_inbox/config.yaml`; изменение кода без увеличения версии не считается обновлением. Home Assistant периодически проверяет репозитории на обновления. Обновления с изменениями, требующими ручного решения, могут не установиться автоматически.
 
-Вкладка **Сеть**: `3000/tcp` → `3010` для веб-интерфейса и ERP API; `2525/tcp` → `25` для прямого SMTP. Веб-интерфейс открывается кнопкой приложения или по `http://homeassistant.local:3010`.
+Вкладка **Сеть**: `3000/tcp` → `3010` для локального веб-интерфейса и ERP API; `2525/tcp` → `25` для прямого SMTP. Кнопка **Открыть веб-интерфейс** открывает ящики внутри Home Assistant, в том числе с телефона. Прямой локальный адрес `http://homeassistant.local:3010` также работает и требует пароль администратора.
 
 ## Доставка без публичного IP и порта 25
 
 Для обычных адресов вида `alice@mail.bmssmart.uz` можно использовать бесплатный catch-all [Forward Email](https://forwardemail.net/en/faq), HTTPS Worker и Cloudflare Tunnel. Письма хранятся в Home Assistant; внешний приёмник только передаёт их туда. Статичный или публичный IP у Home Assistant и проброс входящего порта 25 не нужны.
 
 1. В опциях Mail Code Inbox укажите отдельный `relay_key` длиной не менее 32 символов. Сохраните тот же ключ как секрет `RELAY_KEY` Cloudflare Worker из [`mail_code_inbox/relay`](mail_code_inbox/relay). Не помещайте его в DNS или GitHub.
-2. В Cloudflare Tunnel опубликуйте отдельный HTTPS hostname `inbox-hook.bmssmart.uz`. Направьте **только путь** `/api/inbound/forward-email` на `http://<IP-Home-Assistant>:3010`; для остальных путей установите ответ 404. Этот маршрут принимает запросы от Worker, а веб-интерфейс остаётся на локальном адресе.
+2. В Cloudflare Tunnel опубликуйте отдельный HTTPS hostname `inbox-hook.bmssmart.uz`. Направьте **только путь** `/api/inbound/forward-email` на `http://<IP-Home-Assistant>:3010`; для остальных путей установите ответ 404. Этот маршрут принимает запросы от Worker, а веб-интерфейс открывается через Home Assistant.
 3. В каталоге `mail_code_inbox/relay` разверните Worker: `npx wrangler secret put RELAY_KEY`, затем `npx wrangler deploy`. Перед развёртыванием при необходимости замените `INBOX_URL` в `wrangler.toml` на ваш HTTPS hostname туннеля. Worker проверяет IP отправителя по опубликованному списку серверов Forward Email и передаёт письмо в приложение с отдельным секретом.
 4. В DNS Cloudflare для имени **`mail`** создайте два MX с приоритетом `0`: `mx1.forwardemail.net` и `mx2.forwardemail.net`. На том же имени добавьте TXT `forward-email=https://<адрес-вашего-Worker>.workers.dev/`. Это бесплатная catch-all пересылка на Worker; её URL виден в публичном DNS, но ключ `RELAY_KEY` там отсутствует. MX основного `bmssmart.uz` не меняйте.
 5. Создайте адрес в Mail Code Inbox и отправьте на него пробное письмо. Приложение сохраняет только письма для созданных и включённых адресов. Письмо больше 5 МиБ приложение не принимает.

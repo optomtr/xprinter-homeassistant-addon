@@ -33,6 +33,45 @@ test("existing installations start without a relay key", async () => {
   }
 });
 
+test("Home Assistant ingress serves the mailbox UI only to its proxy", async () => {
+  const folder = mkdtempSync(join(tmpdir(), "mail-code-ingress-"));
+  const options = {
+    dbPath: join(folder, "inbox.sqlite"),
+    mailDomain: "mail.bmssmart.uz",
+    adminPassword: "local-test-password-123",
+    apiKey: "local-erp-api-key-at-least-24-chars",
+    httpPort: 0,
+    ingressPort: 0,
+    smtpPort: 0,
+  };
+  const app = await startApp(options);
+  try {
+    const ingressUrl = `http://127.0.0.1:${app.ingressAddress.port}`;
+    assert.equal((await fetch(`${ingressUrl}/api/session`)).status, 403);
+    assert.equal((await fetch(`http://127.0.0.1:${app.httpAddress.port}/api/session`).then((r) => r.json())).authenticated, false);
+  } finally {
+    await app.close();
+  }
+  const proxyApp = await startApp({ ...options, ingressProxy: "127.0.0.1" });
+  try {
+    const base = `http://127.0.0.1:${proxyApp.ingressAddress.port}`;
+    const page = await fetch(`${base}/`);
+    assert.equal(page.headers.get("x-frame-options"), "SAMEORIGIN");
+    assert.match(await page.text(), /href="style\.css"/u);
+    assert.equal((await fetch(`${base}/api/session`).then((r) => r.json())).authenticated, true);
+    const created = await fetch(`${base}/api/addresses`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ localPart: "ha-ingress" }),
+    });
+    assert.equal(created.status, 201);
+    assert.equal((await created.json()).address, "ha-ingress@mail.bmssmart.uz");
+  } finally {
+    await proxyApp.close();
+    rmSync(folder, { recursive: true, force: true });
+  }
+});
+
 test("creates an address and receives a code through SMTP", async () => {
   const folder = mkdtempSync(join(tmpdir(), "mail-code-inbox-"));
   const app = await startApp({

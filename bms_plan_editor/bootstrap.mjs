@@ -130,6 +130,7 @@ async function main() {
   const dataDir = '/data'
   const options = validateOptions(JSON.parse(await readFile(join(dataDir, 'options.json'), 'utf8')))
   const release = await prepareRelease(dataDir, options)
+  await requireErpGate(release)
   const child = spawn(process.execPath, [join(release.directory, 'server/index.mjs')], {
     cwd: release.directory, stdio: 'inherit', env: { ...safeEnv(), NODE_ENV: 'production',
       PORT: '4174', PLAN_EDITOR_DATA_DIR: dataDir, PLAN_EDITOR_SECRET: options.plan_editor_secret },
@@ -137,6 +138,14 @@ async function main() {
   for (const signal of ['SIGTERM', 'SIGINT']) process.once(signal, () => child.kill(signal))
   child.once('error', () => { log('Unable to start editor server'); process.exitCode = 1 })
   child.once('exit', (code, signal) => { process.exitCode = code ?? (signal === 'SIGTERM' ? 0 : 1) })
+}
+
+export async function requireErpGate(release) {
+  try {
+    if (!(await stat(join(release.directory, 'server/access.mjs'))).isFile()) throw new Error('missing')
+  } catch {
+    throw new Error('Cached editor predates mandatory ERP access. Enable update_on_start and use an updated branch before starting')
+  }
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

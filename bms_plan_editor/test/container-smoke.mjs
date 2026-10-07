@@ -47,11 +47,20 @@ try {
   await writeFile(join(dataDir, 'options.json'), JSON.stringify(options), { mode: 0o600 })
   docker('run', '-d', '--name', name, '-p', '127.0.0.1::4174', '-v', `${dataDir}:/data`, 'bms-plan-editor-addon:test')
   await ready()
-  const html = await (await fetch(base)).text()
+  const direct = await (await fetch(base)).text()
+  assert.ok(!direct.includes('<div id="root">'))
+  assert.match(direct, /location.replace\(erpUrl\)/)
+  const session = await fetch(`${base}/api/session`, { method: 'POST',
+    headers: { Origin: base, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ticket: authorization.slice('Bearer '.length) }) })
+  assert.equal(session.status, 200)
+  const cookie = session.headers.get('set-cookie').split(';')[0]
+  const html = await (await fetch(base, { headers: { Cookie: cookie } })).text()
   assert.ok(html.includes('<div id="root">'))
   const asset = /src="([^"]+\.js)"/.exec(html)?.[1]
   assert.ok(asset)
-  const script = await fetch(`${base}${asset}`)
+  assert.equal((await fetch(`${base}${asset}`)).status, 401)
+  const script = await fetch(`${base}${asset}`, { headers: { Cookie: cookie } })
   assert.equal(script.status, 200)
   assert.match(script.headers.get('content-type'), /javascript/)
   assert.equal((await fetch(`${base}/api/project`)).status, 401)
@@ -83,7 +92,8 @@ try {
   assert.equal(restored.revision, 1)
   const download = await fetch(`${base}/api/reports/${id}/attachments/${attachment.id}`, { headers })
   assert.equal(await download.text(), 'smoke-test-image')
-  console.log('PASS: real private-source build, UI assets, signed project save, report upload, fallback restart and persistent data')
+  assert.equal((await fetch(`${base}${asset}`)).status, 401)
+  console.log('PASS: ERP-only entry, protected UI assets, real source build, project/report persistence and safe fallback restart')
 } finally {
   try { docker('rm', '-f', name) } catch {}
   await rm(dataDir, { recursive: true, force: true })

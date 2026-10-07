@@ -52,7 +52,7 @@ For remote access, point an existing Cloudflare Tunnel hostname, such as
 in ERP's editor configuration. No public IP or router port forwarding is needed
 when using the tunnel. Open a project's editor using **Редактор чертежей** in
 ERP: the signed launch link supplies the project and access rights. Opening the
-Home Assistant web UI directly uses standalone/local project mode instead.
+Home Assistant web UI directly redirects to ERP instead of opening the editor.
 Home Assistant ingress is intentionally not enabled; it is separate from ERP
 authentication and the editor does not allow iframe embedding.
 
@@ -64,10 +64,15 @@ the previous working release active. Check the app log for the installed commit
 and `http://HOME_ASSISTANT_IP:4174/api/health` for readiness. The first build
 needs Internet access and sufficient memory (allow approximately 2 GB free).
 
+Starting with wrapper version 1.0.1, a legacy cached editor without the mandatory
+ERP access gate is refused even after a failed update. Enable updates to download
+the protected editor. Direct entry goes to `https://system.bmssmart.uz/`; the ERP
+object's signed launch link establishes the editor session. A valid session is
+required for both the editor and its assets. Passwords are entered only in ERP.
+
 Bug reports opened through ERP are stored privately on the editor server;
 they are not automatically sent to a Codex chat. The server's report API
-requires an ERP-signed administrator ticket. Standalone reports download as
-a ZIP that can be attached to the support conversation.
+requires an ERP-signed administrator ticket. Standalone entry is disabled.
 
 ## Home Assistant configuration
 

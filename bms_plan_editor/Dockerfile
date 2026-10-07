@@ -1,5 +1,5 @@
 FROM node:22-bookworm-slim
-ARG BUILD_VERSION=1.0.0
+ARG BUILD_VERSION=1.0.1
 ARG BUILD_ARCH=amd64
 LABEL io.hass.version="${BUILD_VERSION}" io.hass.type="app" io.hass.arch="${BUILD_ARCH}"
 RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates tini \

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { activeRelease, prepareRelease, run, validateOptions } from '../bootstrap.mjs'
+import { activeRelease, prepareRelease, requireErpGate, run, validateOptions } from '../bootstrap.mjs'
 
 const options = { plan_editor_secret: 'test-secret-not-for-production-123456',
   github_token: 'github_pat_test', source_branch: 'main', update_on_start: true }
@@ -140,6 +140,14 @@ test('invalid cached pointer cannot traverse to a different directory', async (t
   await seed(directory)
   await writeFile(join(directory, 'editor-runtime/active.json'), '{"revision":"../../private"}')
   await assert.rejects(activeRelease(directory), /Invalid cached revision/)
+})
+
+test('startup refuses legacy cached releases without mandatory ERP gate', async (t) => {
+  const directory = await temporary(t)
+  const release = { directory: await seed(directory) }
+  await assert.rejects(requireErpGate(release), /predates mandatory ERP access/)
+  await writeFile(join(release.directory, 'server/access.mjs'), 'export const sessionCookie = "test"')
+  await requireErpGate(release)
 })
 
 test('command runner returns bounded stdout, ignores stderr and reports safe errors', async () => {

@@ -1,0 +1,15 @@
+configuration:
+  plan_editor_secret:
+    name: ERP signing secret
+    description: 32-256 printable characters without spaces. Use the same secret in ERP. Do not use a user password.
+  github_token:
+    name: Editor repository access
+    description: Fine-grained GitHub token limited to optomtr/bms-planspec with Contents Read-only access.
+  source_branch:
+    name: Editor branch or version
+    description: Normally main. Set a repository tag to pin an editor version.
+  update_on_start:
+    name: Check for updates at startup
+    description: Download and build new code on restart. A failed update uses the last working release. First startup always downloads the editor.
+network:
+  4174/TCP: Plan editor and signed BMS ERP API

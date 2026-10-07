@@ -1,9 +1,10 @@
 # BMS Home Assistant Apps
 
-This repository contains two Home Assistant apps:
+This repository contains three independent Home Assistant apps:
 
 - **Xprinter Label** prints labels on the USB Xprinter XP-365B. See [printer integration](INTEGRATION_RU.md).
 - **Mail Code Inbox** creates email addresses on `bmssmart.uz`, receives verification emails and exposes a server-side API for BMS ERP. The [Russian PDF guide](output/pdf/Mail_Code_Inbox_guide_RU.pdf) now covers delivery without a public IP; see also [mail integration details](MAIL_INTEGRATION_RU.md).
+- **BMS Plan Editor** edits building plans, electrical installation points and coverage maps. Its application code remains in the separate private `optomtr/bms-planspec` repository. Configure a read-only GitHub token and the ERP signing secret in the app settings. Updates are fetched on restart; projects and bug reports remain in persistent storage. See setup below.
 
 ## Xprinter Label
 
@@ -22,11 +23,51 @@ The printer is selected by its stable USB ID:
    https://github.com/optomtr/xprinter-homeassistant-addon
    ```
 
-4. Install **Xprinter Label** and/or **Mail Code Inbox** from the same repository.
+4. Install **Xprinter Label**, **Mail Code Inbox** and/or **BMS Plan Editor** from the same repository. Existing installations can reload the app store to see the new editor.
 5. For Mail Code Inbox, set its admin password and ERP API key in the app configuration, then enable automatic updates in its app details. To receive mail without a public IP, configure the optional relay key and follow the [mail setup](MAIL_INTEGRATION_RU.md).
 6. For Xprinter Label, start the app and open `http://HOME_ASSISTANT_IP:8099/health` to verify `printer_connected` is `true`.
+7. For BMS Plan Editor, configure `github_token` with read-only Contents access to `optomtr/bms-planspec` and a `plan_editor_secret` of at least 32 characters. Start it, then open `http://HOME_ASSISTANT_IP:4174/`. The first start downloads and builds the editor, so allow several minutes. Check `/api/health` after the build. For ERP-linked storage, open the editor through the ERP's signed launch link, not directly through Home Assistant.
 
 This is a Home Assistant app/add-on repository, not a HACS integration.
+
+## BMS Plan Editor setup
+
+In GitHub, create a **fine-grained personal access token**, select only
+`optomtr/bms-planspec`, and grant **Contents: Read-only**. Save it as
+`github_token` in the Home Assistant app configuration. Do not paste it into
+the repository URL, source code, ERP frontend or Cloudflare configuration.
+
+Generate a separate random signing secret (for example, with
+`openssl rand -hex 32`). Save it as `plan_editor_secret` in this app and as
+the editor signing secret in ERP's server-side configuration. The keys must
+match. This is not the printer or email API key.
+
+The editor serves on port **4174** and has its own `/data` directory. Projects,
+uploaded bug-report photos/videos and cached editor releases survive restarts
+and app updates. Back up this app's data with Home Assistant; backups also
+contain its configured secrets. Do not uninstall without a backup.
+
+For remote access, point an existing Cloudflare Tunnel hostname, such as
+`plans.bmssmart.uz`, to `http://HOME_ASSISTANT_IP:4174`, and set that HTTPS URL
+in ERP's editor configuration. No public IP or router port forwarding is needed
+when using the tunnel. Open a project's editor using **Редактор чертежей** in
+ERP: the signed launch link supplies the project and access rights. Opening the
+Home Assistant web UI directly uses standalone/local project mode instead.
+Home Assistant ingress is intentionally not enabled; it is separate from ERP
+authentication and the editor does not allow iframe embedding.
+
+`source_branch: main` + `update_on_start: true` fetches changes from the editor
+repository on **restart**, not while somebody is editing. Set `update_on_start`
+to `false` to keep the cached version, or choose a tag to pin a version. A first
+installation still needs GitHub access. A failed download, test or build leaves
+the previous working release active. Check the app log for the installed commit
+and `http://HOME_ASSISTANT_IP:4174/api/health` for readiness. The first build
+needs Internet access and sufficient memory (allow approximately 2 GB free).
+
+Bug reports opened through ERP are stored privately on the editor server;
+they are not automatically sent to a Codex chat. The server's report API
+requires an ERP-signed administrator ticket. Standalone reports download as
+a ZIP that can be attached to the support conversation.
 
 ## Home Assistant configuration
 

@@ -18,6 +18,10 @@ export function validateOptions(options) {
   if (typeof options.github_token !== 'string' || !/^[A-Za-z0-9_]*$/.test(options.github_token)) {
     throw new Error('github_token must be a GitHub access token')
   }
+  if (options.anthropic_api_key !== undefined && (typeof options.anthropic_api_key !== 'string'
+    || (options.anthropic_api_key && !/^sk-ant-[A-Za-z0-9_-]{12,}$/.test(options.anthropic_api_key)))) {
+    throw new Error('anthropic_api_key must be a valid Claude API key or empty')
+  }
   if (typeof options.source_branch !== 'string'
     || !/^[A-Za-z0-9][A-Za-z0-9._/-]{0,127}$/.test(options.source_branch)
     || options.source_branch.includes('..') || options.source_branch.includes('//')) {
@@ -133,7 +137,8 @@ async function main() {
   await requireErpGate(release)
   const child = spawn(process.execPath, [join(release.directory, 'server/index.mjs')], {
     cwd: release.directory, stdio: 'inherit', env: { ...safeEnv(), NODE_ENV: 'production',
-      PORT: '4174', PLAN_EDITOR_DATA_DIR: dataDir, PLAN_EDITOR_SECRET: options.plan_editor_secret },
+      PORT: '4174', PLAN_EDITOR_DATA_DIR: dataDir, PLAN_EDITOR_SECRET: options.plan_editor_secret,
+      ANTHROPIC_API_KEY: options.anthropic_api_key || '' },
   })
   for (const signal of ['SIGTERM', 'SIGINT']) process.once(signal, () => child.kill(signal))
   child.once('error', () => { log('Unable to start editor server'); process.exitCode = 1 })

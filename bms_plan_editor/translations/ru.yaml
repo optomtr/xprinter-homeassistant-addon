@@ -5,6 +5,9 @@ configuration:
   github_token:
     name: Доступ к репозиторию редактора
     description: Fine-grained GitHub token только для optomtr/bms-planspec с правом Contents Read-only. Не нужен доступ на запись.
+  anthropic_api_key:
+    name: Ключ Claude API
+    description: Необязательный ключ Anthropic для распознавания стен на PDF. Хранится в настройках приложения и передаётся только серверу редактора.
   source_branch:
     name: Ветка или версия редактора
     description: Обычно main. Для фиксации версии можно указать тег из репозитория редактора.

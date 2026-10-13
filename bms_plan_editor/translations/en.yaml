@@ -5,6 +5,9 @@ configuration:
   github_token:
     name: Editor repository access
     description: Fine-grained GitHub token limited to optomtr/bms-planspec with Contents Read-only access.
+  anthropic_api_key:
+    name: Claude API key
+    description: Optional Anthropic key for PDF wall tracing. Passed only to the editor server.
   source_branch:
     name: Editor branch or version
     description: Normally main. Set a repository tag to pin an editor version.

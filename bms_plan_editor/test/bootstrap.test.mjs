@@ -49,10 +49,12 @@ test('validates secrets, token, branch and boolean without revealing credentials
   for (const bad of [null, {}, { ...options, plan_editor_secret: 'short' },
     { ...options, plan_editor_secret: `${options.plan_editor_secret}\n` },
     { ...options, github_token: 'token\nsecret' }, { ...options, source_branch: '--config' },
-    { ...options, source_branch: '../../data' }, { ...options, update_on_start: 'true' }]) {
+    { ...options, source_branch: '../../data' }, { ...options, update_on_start: 'true' },
+    { ...options, anthropic_api_key: 'invalid-key' }]) {
     assert.throws(() => validateOptions(bad), (error) => !error.message.includes(options.plan_editor_secret))
   }
   validateOptions({ ...options, github_token: '', source_branch: 'release/v1.0.0' })
+  validateOptions({ ...options, anthropic_api_key: 'sk-ant-test_key_1234567890' })
 })
 
 test('first install tests/builds source, only Git receives token, promotes complete release', async (t) => {

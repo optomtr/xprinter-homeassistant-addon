@@ -1,5 +1,5 @@
 name: BMS Plan Editor
-version: "1.0.1"
+version: "1.0.2"
 slug: bms_plan_editor
 description: Building plans and electrical installation specifications for BMS ERP
 url: https://github.com/optomtr/xprinter-homeassistant-addon
@@ -17,10 +17,12 @@ ports_description:
 options:
   plan_editor_secret: ""
   github_token: ""
+  anthropic_api_key: ""
   source_branch: main
   update_on_start: true
 schema:
   plan_editor_secret: password
   github_token: password
+  anthropic_api_key: password
   source_branch: str
   update_on_start: bool
